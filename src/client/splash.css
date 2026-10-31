@@ -1,0 +1,12 @@
+:root { font-family: ui-rounded, "Segoe UI", system-ui, sans-serif; }
+* { box-sizing: border-box; }
+html, body, #app { margin: 0; min-height: 0; }
+body { background: #140b2e; color: #fff; }
+.preview { position: relative; isolation: isolate; min-height: 215px; padding: 17px 20px 18px; display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; overflow: hidden; background: linear-gradient(130deg, #140b2e, #2b1056); }
+.preview .shape { position: absolute; inset: auto auto -48px -45px; z-index: -1; width: 128px; height: 128px; transform: rotate(25deg); border: 14px solid #00e5ff; opacity: 0.35; }
+.preview small { font-size: 11px; font-weight: 900; letter-spacing: 1.3px; color: #b9a8f0; }
+.preview h1 { font-size: clamp(20px, 5vw, 28px); line-height: 1.1; color: #ffe14d; margin: 3px 0 0; }
+.preview p { font-size: 13px; margin: 1px 0 8px; color: #fff; }
+.preview button { font: inherit; font-size: 17px; font-weight: 900; color: #0b0620; background: #ffe14d; border: 3px solid #0b0620; border-radius: 14px; padding: 9px 45px; cursor: pointer; box-shadow: 3px 3px 0 #0b0620; }
+.preview button:disabled { opacity: 0.5; cursor: default; }
+.preview span { font-size: 11px; color: #b9a8f0; margin-top: 2px; }
