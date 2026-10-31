@@ -5,7 +5,7 @@ import { themeById, type Theme } from '../game/theme'
 import { applyLook, COLORS, DEFAULT_LOOK, EYES, look, PATTERN_COLORS, PATTERNS, randomLook } from '../game/look'
 import CharacterCanvas from './CharacterCanvas.vue'
 
-const props = defineProps<{ theme: Theme }>()
+const props = defineProps<{ theme: Theme; redditName: string | null }>()
 const emit = defineEmits<{ exit: [] }>()
 
 /**
@@ -52,6 +52,14 @@ function randomize(): void {
 
     <div class="scroll">
       <div class="col">
+        <section class="name-panel">
+          <div class="player-name">
+            <span>REDDIT NAME</span>
+            <div class="name-value" :title="redditName ?? undefined">
+              {{ redditName ? 'u/' + redditName : 'Reddit account' }}
+            </div>
+          </div>
+        </section>
         <section class="stage">
           <div class="character-preview">
             <CharacterCanvas :colors="themed" :look="look" :size="168" />
@@ -193,6 +201,7 @@ function randomize(): void {
   gap: 14px;
 }
 
+.name-panel,
 .stage,
 .opts {
   background: var(--panel);
@@ -202,6 +211,9 @@ function randomize(): void {
   padding: 14px 16px;
 }
 
+/* Identität ist in Devvit an Reddit gebunden und deshalb nicht editierbar. */
+.player-name { display: grid; gap: 6px; width: min(100%, 300px); font-size: 12px; font-weight: 900; letter-spacing: 1px; color: var(--muted); }
+.name-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 2px solid var(--line); background: var(--panel); border-radius: 10px; padding: 5px 8px; font-size: 14px; letter-spacing: normal; color: var(--text); }
 .stage {
   display: grid;
   justify-items: center;

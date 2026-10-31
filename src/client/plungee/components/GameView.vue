@@ -195,7 +195,10 @@ function restart(): void {
               <span class="badge-text">★ New best!</span>
             </div>
           </div>
-          <p v-if="verification" class="board-note" aria-live="polite">{{ verification }}</p>
+          <div v-if="verification" class="board" aria-live="polite">
+            <div class="board-head"><b>Challenge result</b></div>
+            <p class="board-note" :class="{ err: verification !== 'Verifying replay…' && !verification.startsWith('Verified:') }">{{ verification }}</p>
+          </div>
           <div class="actions">
             <button class="cta" type="button" @click="restart">Retry</button>
             <button class="ghost" type="button" @click="emit('exit')">{{ exitText }}</button>

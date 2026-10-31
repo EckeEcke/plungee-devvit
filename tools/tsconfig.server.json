@@ -4,11 +4,20 @@
     "outDir": "../dist/types/server",
     "tsBuildInfoFile": "../dist/types/server/tsconfig.tsbuildinfo",
     "customConditions": [],
-    "types": ["node", "vite/client"],
+    "types": [
+      "node",
+      "vite/client"
+    ],
     "exactOptionalPropertyTypes": false,
-    "rootDir": "../src"
+    "rootDir": "../src",
+    "noUncheckedIndexedAccess": false
   },
-  "include": ["../src/server/**/*", "../src/client/plungee/levels/**/*", "../src/client/plungee/sim/**/*", "../src/client/plungee/editor/hash.ts"],
+  "include": [
+    "../src/server/**/*",
+    "../src/client/plungee/levels/**/*",
+    "../src/client/plungee/sim/**/*",
+    "../src/client/plungee/editor/hash.ts"
+  ],
   "exclude": [],
   "references": [
     {

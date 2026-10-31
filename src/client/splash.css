@@ -1,12 +1,24 @@
-:root { font-family: ui-rounded, "Segoe UI", system-ui, sans-serif; }
-* { box-sizing: border-box; }
-html, body, #app { margin: 0; min-height: 0; }
-body { background: #140b2e; color: #fff; }
-.preview { position: relative; isolation: isolate; min-height: 215px; padding: 17px 20px 18px; display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; overflow: hidden; background: linear-gradient(130deg, #140b2e, #2b1056); }
-.preview .shape { position: absolute; inset: auto auto -48px -45px; z-index: -1; width: 128px; height: 128px; transform: rotate(25deg); border: 14px solid #00e5ff; opacity: 0.35; }
-.preview small { font-size: 11px; font-weight: 900; letter-spacing: 1.3px; color: #b9a8f0; }
-.preview h1 { font-size: clamp(20px, 5vw, 28px); line-height: 1.1; color: #ffe14d; margin: 3px 0 0; }
-.preview p { font-size: 13px; margin: 1px 0 8px; color: #fff; }
-.preview button { font: inherit; font-size: 17px; font-weight: 900; color: #0b0620; background: #ffe14d; border: 3px solid #0b0620; border-radius: 14px; padding: 9px 45px; cursor: pointer; box-shadow: 3px 3px 0 #0b0620; }
-.preview button:disabled { opacity: 0.5; cursor: default; }
-.preview span { font-size: 11px; color: #b9a8f0; margin-top: 2px; }
+:root { font-family: ui-rounded, 'SF Pro Rounded', 'Nunito', 'Quicksand', 'Segoe UI', system-ui, sans-serif; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body, #app { margin: 0; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
+.preview { position: relative; isolation: isolate; height: 100%; width: 100%; overflow: auto; display: flex; background: linear-gradient(180deg, var(--bg1), var(--bg2)); color: var(--text); }
+.decor { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; filter: drop-shadow(5px 5px 0 var(--decor-shadow)); }
+.content { position: relative; width: min(100%, 420px); padding: 16px 22px 20px; margin: auto; flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+h1 { margin: 0; font-size: clamp(38px, 10vw, 57px); font-weight: 900; letter-spacing: 3px; color: var(--accent); -webkit-text-stroke: 3px var(--outline); paint-order: stroke fill; text-shadow: 4px 4px 0 var(--outline); }
+p { margin: 0; }
+.tagline { font-size: 14px; font-weight: 800; }
+.challenge { width: 100%; display: grid; gap: 8px; margin-top: 8px; }
+.challenge-head { display: flex; flex-direction: column; gap: 3px; padding: 6px 10px; background: var(--panel); border: 3px solid var(--line); border-radius: 13px; box-shadow: 3px 3px 0 var(--outline); }
+.challenge-head span { font-size: 11px; font-weight: 900; letter-spacing: 1px; color: var(--muted); }
+.challenge-head strong { font-size: 19px; color: var(--accent); }
+.level-preview { width: min(100%, 288px); aspect-ratio: 16 / 15; margin: 0 auto; overflow: hidden; position: relative; border: 4px solid var(--outline); border-radius: 12px; box-shadow: 4px 4px 0 var(--outline); background: var(--bg1); }
+.level-preview canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.level-preview .runner { position: absolute; transform: translate(-50%, -50%); filter: drop-shadow(2px 2px 0 var(--outline)); }
+.challenge-question { font-size: 16px; font-weight: 900; }
+.play { min-width: 195px; cursor: pointer; font: inherit; font-size: 23px; font-weight: 900; padding: 9px 30px; color: var(--outline); background: var(--accent); border: 4px solid var(--outline); border-radius: 17px; box-shadow: 4px 4px 0 var(--outline); margin-top: 5px; }
+.play:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--outline); }
+.play:disabled { opacity: .5; cursor: default; }
+.controls { font-size: 12px; font-weight: 800; opacity: .85; }
+.status { padding: 25px 0; font-weight: 800; }
+@media (max-height: 540px) { .content { gap: 4px; padding: 9px 20px 12px; } h1 { font-size: 36px; } .level-preview { width: min(100%, 200px); } .tagline { font-size: 12px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
