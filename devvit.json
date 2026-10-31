@@ -36,5 +36,8 @@
   },
   "permissions": {
     "reddit": true
+  },
+  "dev": {
+    "subreddit": "plungee_game_dev"
   }
 }

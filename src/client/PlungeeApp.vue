@@ -1,3 +1,4 @@
+
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import GameView from './plungee/components/GameView.vue'
@@ -140,7 +141,7 @@ async function onPostFinished(run: { ticks: number; deaths: number; replay: stri
     v-model:difficulty="difficulty"
     :theme="theme"
     :progress="progress"
-    :focus-key="activeLevel?.key"
+    :focus-key="activeLevel?.key ?? ''"
     @exit="screen = 'menu'"
     @play="startLevel"
   />

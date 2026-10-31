@@ -1,3 +1,4 @@
+
 import { reactive, watch } from 'vue'
 
 /**
@@ -184,10 +185,10 @@ function ensureMusicElement(): HTMLAudioElement | null {
     el.loop = MUSIC_URLS.length === 1
     el.addEventListener('ended', () => {
       trackIdx = (trackIdx + 1) % MUSIC_URLS.length
-      el.src = MUSIC_URLS[trackIdx]
+      el.src = MUSIC_URLS[trackIdx]!
       void el.play().catch(() => {})
     })
-    el.src = MUSIC_URLS[trackIdx]
+    el.src = MUSIC_URLS[trackIdx]!
     ctx.createMediaElementSource(el).connect(musicBus)
     musicEl = el
   }
@@ -349,8 +350,8 @@ export function setLoop(id: LoopId, active: boolean): void {
     if (st) {
       clearTimeout(st.graceTimer)
       clearTimeout(st.stopTimer)
-      st.graceTimer = undefined
-      st.stopTimer = undefined
+      delete st.graceTimer
+      delete st.stopTimer
       st.gain.gain.setTargetAtTime(LOOPS[id].volume, ctx.currentTime, 0.08)
       return
     }
@@ -365,7 +366,7 @@ export function setLoop(id: LoopId, active: boolean): void {
   } else if (st && st.graceTimer === undefined && st.stopTimer === undefined) {
     const cur = st
     cur.graceTimer = setTimeout(() => {
-      cur.graceTimer = undefined
+      delete cur.graceTimer
       if (!ctx) return
       cur.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.06)
       cur.stopTimer = setTimeout(() => endLoop(id, cur), 350)

@@ -1,10 +1,12 @@
+
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "outDir": "../dist/types/client",
     "tsBuildInfoFile": "../dist/types/client/tsconfig.tsbuildinfo",
     "customConditions": ["browser"],
-    "rootDir": "../src/client"
+    "rootDir": "../src/client",
+    "types": ["vite/client"]
   },
   "include": ["../src/client/**/*"],
   "exclude": [],
