@@ -5,7 +5,7 @@ import { themeById, type Theme } from '../game/theme'
 import { applyLook, COLORS, DEFAULT_LOOK, EYES, look, PATTERN_COLORS, PATTERNS, randomLook } from '../game/look'
 import CharacterCanvas from './CharacterCanvas.vue'
 
-const props = defineProps<{ theme: Theme; redditName: string | null }>()
+const props = defineProps<{ theme: Theme }>()
 const emit = defineEmits<{ exit: [] }>()
 
 /**
@@ -52,14 +52,6 @@ function randomize(): void {
 
     <div class="scroll">
       <div class="col">
-        <section class="name-panel">
-          <div class="player-name">
-            <span>REDDIT NAME</span>
-            <div class="name-value" :title="redditName ?? undefined">
-              {{ redditName ? 'u/' + redditName : 'Reddit account' }}
-            </div>
-          </div>
-        </section>
         <section class="stage">
           <div class="character-preview">
             <CharacterCanvas :colors="themed" :look="look" :size="168" />
@@ -114,25 +106,28 @@ function randomize(): void {
             </button>
           </div>
 
-          <template>
-            <h3 :class="{ disabled: look.pattern === 'none' }">Pattern color</h3>
-            <div class="swatches" role="radiogroup" aria-label="Pattern color" :aria-disabled="look.pattern === 'none'">
-              <button
-                v-for="c in PATTERN_COLORS"
-                :key="c.id"
-                type="button"
-                role="radio"
-                class="sw"
-                :class="{ on: look.patternColor === c.id }"
-                :aria-checked="look.patternColor === c.id"
-                :aria-label="c.label"
-                :title="c.label"
-                :style="patternSwatch(c.hex)"
-                :disabled="look.pattern === 'none'"
-                @click="look.patternColor = c.id"
-              />
-            </div>
-          </template>
+          <h3 :class="{ disabled: look.pattern === 'none' }">Pattern color</h3>
+          <div
+            class="swatches pattern-swatches"
+            role="radiogroup"
+            aria-label="Pattern color"
+            :aria-disabled="look.pattern === 'none'"
+          >
+            <button
+              v-for="c in PATTERN_COLORS"
+              :key="c.id"
+              type="button"
+              role="radio"
+              class="sw"
+              :class="{ on: look.patternColor === c.id }"
+              :aria-checked="look.patternColor === c.id"
+              :aria-label="c.label"
+              :title="c.label"
+              :style="patternSwatch(c.hex)"
+              :disabled="look.pattern === 'none'"
+              @click="look.patternColor = c.id"
+            />
+          </div>
         </section>
 
         <div class="actions">
@@ -201,7 +196,6 @@ function randomize(): void {
   gap: 14px;
 }
 
-.name-panel,
 .stage,
 .opts {
   background: var(--panel);
@@ -211,9 +205,6 @@ function randomize(): void {
   padding: 14px 16px;
 }
 
-/* Identität ist in Devvit an Reddit gebunden und deshalb nicht editierbar. */
-.player-name { display: grid; gap: 6px; width: min(100%, 300px); font-size: 12px; font-weight: 900; letter-spacing: 1px; color: var(--muted); }
-.name-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 2px solid var(--line); background: var(--panel); border-radius: 10px; padding: 5px 8px; font-size: 14px; letter-spacing: normal; color: var(--text); }
 .stage {
   display: grid;
   justify-items: center;
@@ -237,6 +228,11 @@ h3:first-child {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+/* Immer sichtbar, auch bei "None"; die Buttons sind dann disabled. */
+.pattern-swatches {
+  min-height: 40px;
 }
 
 .sw {
@@ -295,7 +291,7 @@ h3:first-child {
   border-radius: 999px;
 }
 h3.disabled { opacity: 0.35; }
-.sw:disabled { opacity: 0.35; cursor: not-allowed; }
+.sw:disabled { opacity: 0.55; cursor: not-allowed; }
 .character-preview { width: 168px; height: 168px; }
 @media (max-width: 599px) {
   .stage { position: sticky; top: 0; z-index: 2; padding: 10px 16px; }

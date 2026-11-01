@@ -40,7 +40,7 @@ import {
 } from '../sim'
 import { drawCharacter, type CharacterColors } from './character'
 import type { Ghost } from './ghost'
-import { look } from './look'
+import { applyLook, look } from './look'
 import { Particles } from './particles'
 import type { Theme } from './theme'
 
@@ -1294,14 +1294,16 @@ export class Renderer {
       const x = w.prevX + (p.x - w.prevX) * alpha
       const y = w.prevY + (p.y - w.prevY) * alpha
       const vyN = clamp(p.vy / TERMINAL_VY, -1, 1)
+      const ghostLook = g.spec.look ?? look
+      const ghostTheme = applyLook(this.theme, ghostLook)
       const colors: CharacterColors = g.spec.color
-        ? { ...this.theme, player: g.spec.color, playerShade: darken(g.spec.color, 0.78) }
-        : this.theme
+        ? { ...ghostTheme, player: g.spec.color, playerShade: darken(g.spec.color, 0.78) }
+        : ghostTheme
 
       ctx.save()
       ctx.translate(x + PLAYER_W / 2, y + PLAYER_H)
       ctx.globalAlpha = g.spec.solid ? 0.95 : 0.42
-      drawCharacter(ctx, colors, look, {
+      drawCharacter(ctx, colors, ghostLook, {
         face: p.facing * 0.7,
         ox: clamp(p.vx / 110, -1, 1) * 1.1,
         oy: vyN,

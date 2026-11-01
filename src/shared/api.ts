@@ -4,12 +4,60 @@ export type PostInitResponse = {
   levelKey: string
   title: string
   username: string | null
+  kind?: 'practice' | 'challenge' | 'weekly' | 'community'
+  levelData?: unknown
+  closesAt?: number
+  weekId?: string
+  targetTicks?: number
+}
+
+export type StoredLook = {
+  color: string
+  eyes: string
+  pattern: string
+  patternColor: string
 }
 
 export type VerifyRunResponse = {
   verified: true
   ticks: number
   deaths: number
+  recorded: boolean
+  closed: boolean
+  canPostResult: boolean
+  resultRunId?: string
+  improved: boolean
+  personalBest: { ticks: number; deaths: number } | null
+}
+
+export type LeaderboardEntry = {
+  rank: number
+  username: string | null
+  ticks: number
+  deaths: number
+  replay: string
+  look: StoredLook
+  isCreator: boolean
+  isCurrentUser: boolean
+}
+
+export type LeaderboardResponse = {
+  released: boolean
+  closesAt: number
+  entries: LeaderboardEntry[]
+  yourRank: number | null
+  yourEntry: LeaderboardEntry | null
 }
 
 export type ApiError = { error: string }
+
+export type ChallengeProfile = { username: string | null; avatarUrl: string | null }
+export type ChallengeVersusResponse = { creator: ChallengeProfile; viewer: ChallengeProfile }
+
+export type CommunityLevelMeta = {
+  id: string
+  title: string
+  author: string
+  size: string
+  createdAt: number
+}

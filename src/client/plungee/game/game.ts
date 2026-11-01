@@ -26,6 +26,8 @@ export type GameStatus = 'ready' | 'running' | 'finished'
 
 export interface HudState {
   status: GameStatus
+  /** True after the player has clicked the start control and the countdown is active. */
+  started: boolean
   /** Vergangene Ticks im Lauf (Zeit = ticks / 60) */
   ticks: number
   deaths: number
@@ -41,6 +43,7 @@ export interface HudState {
   replay: string
   /** Zuschauermodus: Fortschritt und Zielzeit jedes Läufers (sonst leer) */
   race: Array<{ progress: number; finishTick: number | null }>
+  focusedRunner: number | null
 }
 
 const STEP_MS = DT * 1000
@@ -59,6 +62,8 @@ export class Game {
   private level!: CompiledLevel
   private levelKey = ''
   private status: GameStatus = 'ready'
+  private started = false
+  private hasStartedSession = false
   private countdownMs = 0
   private inputs: Int8Array = new Int8Array(MAX_REPLAY_TICKS)
   private inputCount = 0
@@ -80,6 +85,7 @@ export class Game {
   private otherGhosts: Ghost[] = []
   /** Zuschauermodus: Eingaben des Führenden, die statt der Tastatur die Kamera-Welt steuern */
   private spectator: Int8Array | null = null
+  private focusedRunner = 0
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -135,7 +141,27 @@ export class Game {
     this.otherGhosts = specs.flatMap((s) => makeGhost(this.level, { ...s, solid: true }) ?? [])
     this.spectator = this.otherGhosts.length > 0 ? this.otherGhosts[0].inputs : null
     this.renderer.hidePlayer = this.spectator !== null
+    this.focusedRunner = 0
     return this.spectator !== null
+  }
+
+  focusRunner(index: number): void {
+    if (!this.spectator || this.status === 'finished') return
+    const ghost = this.otherGhosts[index]
+    if (!ghost || ghost.world.finished) return
+    this.focusedRunner = index
+    this.emitHud()
+  }
+
+  private advanceReplayCamera(): void {
+    if (!this.spectator || !this.otherGhosts[this.focusedRunner]?.world.finished) return
+    let next = -1
+    for (let i = 0; i < this.otherGhosts.length; i++) {
+      const ghost = this.otherGhosts[i]
+      if (ghost.world.finished) continue
+      if (next < 0 || ghost.progress > this.otherGhosts[next].progress) next = i
+    }
+    if (next >= 0) this.focusedRunner = next
   }
 
   /** Alle Ghosts, die gerade laufen sollen */
@@ -175,9 +201,22 @@ export class Game {
     this.inputCount = 0
     this.acc = 0
     this.status = 'ready'
+    this.focusedRunner = 0
+    this.started = this.hasStartedSession
     this.countdownMs = COUNTDOWN_STEP_MS * 3
     this.newBest = false
     this.replay = ''
+    this.emitHud()
+  }
+
+  /** Starts the paused ready state after the player has focused the game. */
+  start(): void {
+    if (this.status !== 'ready' || this.started) return
+    this.hasStartedSession = true
+    this.started = true
+    this.countdownMs = COUNTDOWN_STEP_MS * 3
+    this.lastCountdown = 0
+    this.lastTs = performance.now()
     this.emitHud()
   }
 
@@ -212,7 +251,7 @@ export class Game {
     const dtMs = Math.min(ts - this.lastTs, 100)
     this.lastTs = ts
 
-    if (this.status === 'ready') {
+    if (this.status === 'ready' && this.started) {
       this.countdownMs -= dtMs
       if (this.countdownMs <= 0) {
         this.status = 'running'
@@ -235,6 +274,7 @@ export class Game {
         if (!this.spectator && this.inputCount < MAX_REPLAY_TICKS) this.inputs[this.inputCount++] = dir
         this.world.step(dir)
         for (const g of ghosts) g.step()
+        this.advanceReplayCamera()
         // Zuschauer: erst wenn alle im Ziel sind (der Führende ist es zuerst)
         if (this.spectator ? this.world.finished && ghosts.every((g) => g.world.finished) : this.world.finished) this.finish()
       }
@@ -242,8 +282,11 @@ export class Game {
       this.emitHud()
     }
 
-    this.renderer.update(dtMs / 1000, this.world)
-    this.renderer.draw(this.world, this.status === 'running' ? this.acc / STEP_MS : 0, this.status === 'running', this.activeGhosts())
+    const displayWorld = this.spectator
+      ? (this.otherGhosts[this.focusedRunner]?.world ?? this.world)
+      : this.world
+    this.renderer.update(dtMs / 1000, displayWorld)
+    this.renderer.draw(displayWorld, this.status === 'running' ? this.acc / STEP_MS : 0, this.status === 'running', this.activeGhosts())
   }
 
   private finish(): void {
@@ -311,18 +354,23 @@ export class Game {
 
   private emitHud(): void {
     const lv = this.level
-    const p = this.world.p
+    const displayWorld = this.spectator
+      ? (this.otherGhosts[this.focusedRunner]?.world ?? this.world)
+      : this.world
+    const p = displayWorld.p
     const progress = Math.max(0, Math.min(1, (p.y + PLAYER_H) / lv.height))
     this.onHud({
       status: this.status,
       ticks: this.world.finished ? this.world.finishTick : this.world.tick,
       deaths: this.world.deaths,
       progress: this.status === 'finished' ? 1 : progress,
-      countdown: this.status === 'ready' ? Math.max(1, Math.ceil(this.countdownMs / COUNTDOWN_STEP_MS)) : 0,
+      countdown: this.status === 'ready' ? Math.min(3, Math.max(1, Math.ceil(this.countdownMs / COUNTDOWN_STEP_MS))) : 0,
       bestTicks: this.bestTicks,
       newBest: this.newBest,
       replay: this.replay,
       race: this.spectator ? this.otherGhosts.map((g) => ({ progress: g.progress, finishTick: g.finishTick })) : [],
+      started: this.started,
+      focusedRunner: this.spectator ? this.focusedRunner : null,
     })
   }
 

@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { requestExpandedMode } from '@devvit/web/client'
 import CharacterCanvas from './plungee/components/CharacterCanvas.vue'
 import { look, applyLook } from './plungee/game/look'
 import { themeById } from './plungee/game/theme'
 import { LEVELS, type LevelEntry } from './plungee/levels'
 import type { PostInitResponse } from '../shared/api'
+import type { ChallengeVersusResponse } from '../shared/api'
+import { formatTicks } from './plungee/sim'
+
+const PREVIEW_ROWS = 16
 
 function darkMode(): boolean {
   try {
@@ -13,10 +17,14 @@ function darkMode(): boolean {
     if (saved === 'memphis-dark') return true
     if (saved === 'memphis-light') return false
     return window.matchMedia('(prefers-color-scheme: dark)').matches
-  } catch { return false }
+  } catch {
+    return false
+  }
 }
+
 const theme = themeById(darkMode() ? 'memphis-dark' : 'memphis-light')
 const colors = computed(() => applyLook(theme, look))
+
 const vars = {
   '--bg1': theme.bgTop,
   '--bg2': theme.bgBottom,
@@ -26,50 +34,84 @@ const vars = {
   '--accent': theme.ui.accent,
   '--outline': theme.outline,
   '--line': theme.ui.line,
-  '--solid': theme.solid,
   '--c0': theme.decor[0],
   '--c1': theme.decor[1],
   '--c2': theme.decor[2],
   '--c3': theme.decor[3],
+  '--creator-ring': theme.id === 'memphis-dark' ? theme.decor[0] : theme.decor[3],
   '--decor-shadow': `color-mix(in srgb, ${theme.decorShadow} ${Math.round(theme.decorShadowAlpha * 100)}%, ${theme.bgTop})`,
 }
+
 const loading = ref(true)
 const error = ref('')
 const level = ref<LevelEntry | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
-const spawn = computed(() => level.value?.data.entities.find(e => e.t === 'spawn'))
+const postKind = ref<PostInitResponse['kind']>()
+const targetTicks = ref<number | null>(null)
+const closesAt = ref<number | null>(null)
+const now = ref(Date.now())
+const replaysAvailable = ref(false)
+const versus = ref<ChallengeVersusResponse | null>(null)
+const creatorImageFailed = ref(false)
+const viewerImageFailed = ref(false)
+async function loadVersus(): Promise<void> {
+  try {
+    const response = await fetch('/api/challenge-versus')
+    if (response.ok) versus.value = await response.json() as ChallengeVersusResponse
+  } catch { /* Keep the challenge playable when profiles are unavailable. */ }
+}
+let countdownInterval: ReturnType<typeof setInterval> | undefined
+const weeklyTimeLeft = computed(() => {
+  if (closesAt.value === null) return ''
+  const remaining = Math.max(0, closesAt.value - now.value)
+  if (remaining === 0) return 'Challenge ended'
+  const seconds = Math.ceil(remaining / 1000)
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor(seconds / 3600) % 24
+  const minutes = Math.floor(seconds / 60) % 60
+  if (days > 0) return `${days}d ${hours}h ${minutes}m left`
+  if (hours > 0) return `${hours}h ${minutes}m left`
+  return `${minutes}m ${seconds % 60}s left`
+})
+onBeforeUnmount(() => { if (countdownInterval !== undefined) clearInterval(countdownInterval) })
 
-/** Statische Vorschau aus den echten Leveldaten – keine erfundene Levelgrafik oder fremden Assets. */
+/** Vorschau direkt aus den echten Leveldaten. */
 function drawPreview(): void {
   const c = canvas.value
   const data = level.value?.data
   const ctx = c?.getContext('2d')
   if (!c || !ctx || !data) return
-  const tile = 18
-  const rows = 15
+
+  const tile = 14
   c.width = 16 * tile
-  c.height = rows * tile
+  c.height = PREVIEW_ROWS * tile
   ctx.clearRect(0, 0, c.width, c.height)
   ctx.fillStyle = theme.bgTop
   ctx.fillRect(0, 0, c.width, c.height)
-  for (let y = 0; y < rows; y++) {
+
+  for (let y = 0; y < PREVIEW_ROWS; y++) {
     const line = data.tiles[y] ?? ''
     for (let x = 0; x < 16; x++) {
       if (line[x] !== '#') continue
+
       ctx.fillStyle = theme.solid
       ctx.fillRect(x * tile, y * tile, tile, tile)
+
       if (y === 0 || data.tiles[y - 1]?.[x] !== '#') {
         ctx.fillStyle = theme.solidTop
         ctx.fillRect(x * tile, y * tile, tile, 4)
       }
+
       ctx.fillStyle = theme.solidShade
       ctx.fillRect(x * tile + tile - 3, y * tile + 4, 3, tile - 4)
     }
   }
+
   for (const entity of data.entities) {
-    if (entity.y >= rows) continue
+    if (entity.y >= PREVIEW_ROWS) continue
     const px = entity.x * tile
     const py = entity.y * tile
+
     if (entity.t === 'spikes') {
       ctx.fillStyle = theme.danger
       ctx.beginPath()
@@ -101,66 +143,124 @@ function drawPreview(): void {
     }
   }
 }
-watch(level, async () => { await nextTick(); drawPreview() })
+
+watch(level, async () => {
+  await nextTick()
+  drawPreview()
+})
+
 onMounted(async () => {
   try {
     const res = await fetch('/api/init')
     if (!res.ok) throw new Error('Challenge unavailable')
+
     const data = await res.json() as PostInitResponse
-    const entry = LEVELS.find(l => l.key === data.levelKey)
+    const entry = data.kind === 'community' && data.levelData
+      ? { key: data.levelKey, title: data.title, data: data.levelData as LevelEntry['data'], difficulty: 'normal' as const, par: null }
+      : LEVELS.find(l => l.key === data.levelKey)
     if (!entry) throw new Error('Level missing from this version of Plungee')
+
     level.value = entry
+    postKind.value = data.kind
+    targetTicks.value = data.targetTicks ?? null
+    if (data.kind === 'challenge') void loadVersus()
+    closesAt.value = typeof data.closesAt === 'number' && Number.isFinite(data.closesAt) ? data.closesAt : null
+    now.value = Date.now()
+    if (data.kind === 'weekly' && closesAt.value !== null) {
+      countdownInterval = setInterval(() => { now.value = Date.now() }, 1000)
+    }
+    if (closesAt.value !== null && now.value >= closesAt.value) {
+      const response = await fetch('/api/leaderboard')
+      if (response.ok) {
+        const board = await response.json() as { released: boolean; entries: unknown[] }
+        replaysAvailable.value = board.released && board.entries.length > 0
+      }
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Could not load level'
-  } finally { loading.value = false }
+  } finally {
+    loading.value = false
+  }
 })
+
 function play(event: MouseEvent): void {
-  // Devvit requires opening the expanded view synchronously from the user's click.
+  // Devvit: direkt aus dem Klick in die erweiterte Ansicht wechseln.
   void requestExpandedMode(event, 'game', { title: 'Plungee' })
+}
+function watchReplays(event: MouseEvent): void {
+  void requestExpandedMode(event, 'replays', { title: 'Plungee Replays' })
 }
 </script>
 
 <template>
   <main class="preview" :style="vars">
-    <!-- Same motifs and theme roles as the original Plungee menu. -->
-    <svg class="decor" viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <polygon points="60,120 110,210 10,210" fill="color-mix(in srgb, var(--c0) 50%, var(--bg1))" />
-      <circle cx="330" cy="150" r="34" fill="none" stroke="color-mix(in srgb, var(--c2) 50%, var(--bg1))" stroke-width="10" />
-      <path d="M250 330 q15 -22 30 0 t30 0 t30 0 t30 0" fill="none" stroke="color-mix(in srgb, var(--c1) 60%, var(--bg1))" stroke-width="10" stroke-linecap="round" />
-      <path d="M30 470 l22 -26 l22 26 l22 -26 l22 26" fill="none" stroke="color-mix(in srgb, var(--c3) 55%, var(--bg1))" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
-      <g fill="color-mix(in srgb, var(--c2) 55%, var(--bg1))">
-        <circle cx="300" cy="560" r="6"/><circle cx="324" cy="560" r="6"/><circle cx="348" cy="560" r="6"/>
-        <circle cx="300" cy="584" r="6"/><circle cx="324" cy="584" r="6"/><circle cx="348" cy="584" r="6"/>
-      </g>
-      <polygon points="90,640 150,690 90,740" fill="color-mix(in srgb, var(--c1) 50%, var(--bg1))" />
-      <rect x="320" y="690" width="44" height="44" rx="10" fill="color-mix(in srgb, var(--c0) 45%, var(--bg1))" transform="rotate(14 342 712)" />
-      <path d="M200 20 v40 M180 40 h40" stroke="color-mix(in srgb, var(--c3) 50%, var(--bg1))" stroke-width="10" stroke-linecap="round" />
+    <svg
+      class="decor"
+      viewBox="0 0 1000 650"
+      preserveAspectRatio="xMidYMid slice"
+      aria-hidden="true"
+    >
+      <polygon points="65,155 165,315 -35,315" fill="color-mix(in srgb, var(--c0) 55%, var(--bg1))" />
+      <path d="M25 475 l35 -40 l35 40 l35 -40 l35 40" fill="none" stroke="color-mix(in srgb, var(--c3) 55%, var(--bg1))" stroke-width="13" stroke-linejoin="round" stroke-linecap="round" />
+      <circle cx="940" cy="190" r="58" fill="none" stroke="color-mix(in srgb, var(--c2) 55%, var(--bg1))" stroke-width="16" />
+      <polygon points="880,490 990,560 880,625" fill="color-mix(in srgb, var(--c1) 60%, var(--bg1))" />
     </svg>
 
     <div class="content">
-      <h1>PLUNGEE</h1>
-      <p class="tagline">Fall fast. Land smart.</p>
-      <div v-if="level" class="challenge">
-        <div class="challenge-head">
-          <span>CHALLENGE</span>
-          <strong>{{ level.title }}</strong>
+      <div class="brand">
+        <div class="brand-copy">
+          <h1>PLUNGEE</h1>
+          <p class="tagline">Fall fast. Land smart.</p>
         </div>
-        <div class="level-preview">
-          <canvas ref="canvas" aria-hidden="true" />
-          <CharacterCanvas
-            v-if="spawn && spawn.y < 15"
-            class="runner"
-            :style="{ left: `${(spawn.x + 0.5) / 16 * 100}%`, top: `${(spawn.y + 0.5) / 15 * 100}%` }"
-            :colors="colors"
-            :look="look"
-            :size="44"
-          />
-        </div>
-        <p class="challenge-question">Can you beat this level?</p>
       </div>
+
+      <template v-if="level">
+        <button class="play" type="button" @click="play">
+          ▶ Play
+        </button>
+        <button v-if="replaysAvailable" class="watch-replays" type="button" @click="watchReplays">Watch replays</button>
+
+        <div class="level-preview" aria-label="Preview of the challenge level">
+          <canvas ref="canvas" aria-hidden="true" />
+          <div class="level-overlay">
+            <CharacterCanvas
+              v-if="postKind !== 'challenge'"
+              class="preview-character"
+              :colors="colors"
+              :look="look"
+              :size="72"
+            />
+            <div v-else class="challenge-versus" aria-label="Challenge creator versus you">
+              <div class="versus-player">
+                <div class="versus-avatar creator-avatar">
+                  <img v-if="versus?.creator.avatarUrl && !creatorImageFailed" :src="versus.creator.avatarUrl" alt="" @error="creatorImageFailed = true" />
+                  <span v-else aria-hidden="true">{{ versus?.creator.username?.charAt(0).toUpperCase() ?? '?' }}</span>
+                </div>
+                <b :title="versus?.creator.username ?? 'Creator'">{{ versus?.creator.username ?? 'Creator' }}</b>
+              </div>
+              <strong class="versus-label">VS.</strong>
+              <div class="versus-player">
+                <div class="versus-avatar viewer-avatar">
+                  <img v-if="versus?.viewer.avatarUrl && !viewerImageFailed" :src="versus.viewer.avatarUrl" alt="" @error="viewerImageFailed = true" />
+                  <span v-else aria-hidden="true">{{ versus?.viewer.username?.charAt(0).toUpperCase() ?? '?' }}</span>
+                </div>
+                <b :title="versus?.viewer.username ?? 'You'">{{ versus?.viewer.username ?? 'You' }}</b>
+              </div>
+            </div>
+            <div class="overlay-copy">
+              <p v-if="postKind === 'weekly'" class="weekly-label">Weekly Challenge</p>
+              <p class="challenge-question">{{ postKind === 'challenge' ? 'Can you beat my time?' : 'Set the fastest time!' }}</p>
+              <p v-if="postKind === 'challenge' && targetTicks !== null" class="challenge-target">{{ formatTicks(targetTicks) }}</p>
+              <h2 class="level-name">{{ level.title }}</h2>
+              <p v-if="postKind === 'weekly' && weeklyTimeLeft" class="weekly-countdown" role="timer">{{ weeklyTimeLeft }}</p>
+            </div>
+          </div>
+        </div>
+      </template>
+
       <p v-else-if="loading" class="status">Loading challenge…</p>
       <p v-else role="alert" class="status">{{ error }}</p>
-      <button class="play" type="button" :disabled="!level" @click="play">▶ Play</button>
+
       <p class="controls">◀ ▶ to move · Gravity does the rest</p>
     </div>
   </main>

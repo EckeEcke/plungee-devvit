@@ -6,6 +6,8 @@ import { DIFFICULTIES, LEVELS_BY_DIFFICULTY, type Difficulty } from '../levels'
 import { formatTicks } from '../sim'
 import MedalIcon from './MedalIcon.vue'
 import PageShell from './PageShell.vue'
+import GhostToggle from './GhostToggle.vue'
+import { ghostSettings } from '../game/ghost'
 
 const props = defineProps<{ theme: Theme; progress: ProgressMap; difficulty: Difficulty; focusKey?: string }>()
 const emit = defineEmits<{ exit: []; play: [index: number]; 'update:difficulty': [d: Difficulty] }>()
@@ -79,6 +81,11 @@ onMounted(async () => {
             {{ d.label }} <small>{{ doneIn(d.id) }}</small>
           </button>
         </div>
+        <GhostToggle
+          v-model="ghostSettings.self"
+          label="Ghost"
+          title="Race your own best run as a ghost"
+        />
         <div class="gold" :title="`${golds} gold medals`">
           <MedalIcon medal="gold" :size="20" />
           <b>{{ golds }}</b>
@@ -247,6 +254,7 @@ onMounted(async () => {
   color: var(--muted);
 }
 
+/* Eigener Bestzeit-Ghost: originaler Schalter der Webversion. */
 /* Der Scrollbereich geht über die volle Breite, so sitzt die Scrollleiste am Fensterrand */
 .grid-wrap {
   position: relative;
@@ -353,6 +361,7 @@ onMounted(async () => {
    Die Kopfleiste geht über die ganze Breite, darunter steht ein Streifen mit den Kacheln,
    der seitlich nur durch Rahmenlinien begrenzt ist. Tabs ersetzen die Pfeile. */
 @media (min-width: 600px) {
+
   .top-in {
     width: 100%;
     gap: 18px;

@@ -1,25 +1,43 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import GameView from './plungee/components/GameView.vue'
+const RaceView = defineAsyncComponent(() => import('./plungee/components/RaceView.vue'))
+const EditorView = defineAsyncComponent(() => import('./plungee/components/EditorView.vue'))
+import CommunityView from './plungee/components/CommunityView.vue'
+import { prepareDraft } from './plungee/editor/storage'
 import CampaignView from './plungee/components/CampaignView.vue'
 import CharacterView from './plungee/components/CharacterView.vue'
 import CharacterCanvas from './plungee/components/CharacterCanvas.vue'
-import SoundIcon from './plungee/components/SoundIcon.vue'
-import { applyLook, look } from './plungee/game/look'
-import { ghostSettings } from './plungee/game/ghost'
+import { applyLook, DEFAULT_LOOK, look, sanitizeLook } from './plungee/game/look'
 import { themeById } from './plungee/game/theme'
 import { DIFFICULTIES, LEVELS, LEVELS_BY_DIFFICULTY, type Difficulty, type LevelEntry } from './plungee/levels'
 import type { ProgressMap } from './plungee/game/progress'
 import { loadProgress, recordResult } from './plungee/game/progress'
-import { audioSettings } from './plungee/audio/audio'
 import { formatTicks } from './plungee/sim'
-import type { PostInitResponse, VerifyRunResponse } from '../shared/api'
+import type { LeaderboardResponse, PostInitResponse, VerifyRunResponse } from '../shared/api'
+import type { GhostSpec } from './plungee/game/ghost'
 
-type Screen = 'loading' | 'postPlay' | 'campaign' | 'campaignPlay' | 'character' | 'menu' | 'error'
+type Screen = 'loading' | 'postPlay' | 'replay' | 'campaign' | 'campaignPlay' | 'character' | 'menu' | 'error' | 'editor' | 'community'
 const screen = ref<Screen>('loading')
 const notice = ref('')
+const settingsOpen = ref(false)
+const confirmDelete = ref(false)
+const deleting = ref(false)
+const canPostResult = ref(false)
+const resultRunId = ref('')
+const resultCommentStatus = ref('')
 const postLevel = ref<LevelEntry | null>(null)
-const redditName = ref<string | null>(null)
+const activePostId = ref('')
+const fromCommunity = ref(false)
+function postApi(path: string): string {
+  return activePostId.value ? `${path}?postId=${encodeURIComponent(activePostId.value)}` : path
+}
+const postKind = ref<PostInitResponse['kind']>('practice')
+const postClosesAt = ref<number | null>(null)
+const postWeekId = ref<string | null>(null)
+const postClosed = ref(false)
+const targetTicks = ref<number | null>(null)
+const releasedLeaderboard = ref<LeaderboardResponse | null>(null)
 
 function initialDark(): boolean {
   try {
@@ -54,6 +72,8 @@ const playDifficulty = ref<Difficulty>(difficulty.value)
 const levelIdx = ref(0)
 const progress = ref<ProgressMap>(loadProgress())
 const verification = ref('')
+const challengeStatus = ref('')
+const challengeUrl = ref('')
 let finishRequest = 0
 
 const activeLevel = computed(() => LEVELS_BY_DIFFICULTY[playDifficulty.value][levelIdx.value] ?? null)
@@ -62,19 +82,47 @@ const postLevelNumber = computed(() => {
   const level = postLevel.value
   return level ? LEVELS_BY_DIFFICULTY[level.difficulty].findIndex(l => l.key === level.key) + 1 : 0
 })
+const releasedGhosts = computed<GhostSpec[]>(() => (releasedLeaderboard.value?.released ? releasedLeaderboard.value.entries : []).map((entry) => ({
+  replay: entry.replay,
+  label: entry.username ? `#${entry.rank} ${entry.username}` : `#${entry.rank}`,
+  look: sanitizeLook(entry.look),
+})))
+const visibleLeaderboard = computed(() => {
+  const response = releasedLeaderboard.value
+  if (!response) return []
+  const entries = [...response.entries]
+  if (response.yourEntry && !entries.some(entry => entry.isCurrentUser)) entries.push(response.yourEntry)
+  return entries.sort((a, b) => a.rank - b.rank)
+})
+const isWeeklyPost = computed(() => postKind.value === 'weekly')
 
 async function initialize(): Promise<void> {
   try {
     const response = await fetch('/api/init')
     if (!response.ok) throw new Error('This Plungee post has no available level.')
     const data = await response.json() as PostInitResponse
-    const level = LEVELS.find(l => l.key === data.levelKey)
+    const level = data.kind === 'community' && data.levelData
+      ? { key: data.levelKey, title: data.title, data: data.levelData as LevelEntry['data'], difficulty: 'normal' as const, par: null }
+      : LEVELS.find(l => l.key === data.levelKey)
     if (!level) throw new Error('Level missing from this version of Plungee.')
     postLevel.value = level
-    redditName.value = data.username
+    activePostId.value = data.postId
+    postKind.value = data.kind ?? 'practice'
+    targetTicks.value = data.targetTicks ?? null
+    postClosesAt.value = data.closesAt ?? null
+    postClosed.value = typeof data.closesAt === 'number' && Date.now() >= data.closesAt
+    postWeekId.value = data.weekId ?? null
+    try {
+      const leaderboardResponse = await fetch(postApi('/api/leaderboard'))
+      if (leaderboardResponse.ok) releasedLeaderboard.value = await leaderboardResponse.json() as LeaderboardResponse
+    } catch {
+      // A closed leaderboard is optional; the challenge remains playable if it is unavailable.
+    }
     difficulty.value = level.difficulty
     playDifficulty.value = level.difficulty
-    screen.value = 'postPlay' // Reddit post -> directly into challenge
+    screen.value = window.location.pathname.endsWith('/replays.html') && releasedLeaderboard.value?.released && releasedLeaderboard.value.entries.length
+      ? 'replay'
+      : 'postPlay'
   } catch (error) {
     notice.value = error instanceof Error ? error.message : 'Could not open level.'
     screen.value = 'error'
@@ -83,40 +131,172 @@ async function initialize(): Promise<void> {
 onMounted(() => { void initialize() })
 
 function startLevel(index: number): void {
+  ++finishRequest
   playDifficulty.value = difficulty.value
   levelIdx.value = index
   verification.value = ''
+  challengeStatus.value = ''
+  challengeUrl.value = ''
   screen.value = 'campaignPlay'
 }
 function continueCampaign(): void {
+  if (fromCommunity.value) { screen.value = 'community'; return }
   if (postLevel.value) difficulty.value = postLevel.value.difficulty
   screen.value = 'campaign'
 }
-function onCampaignFinished(run: { ticks: number; deaths: number }): void {
+async function openEditor(): Promise<void> {
+  try {
+    await prepareDraft()
+    screen.value = 'editor'
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'Editor unavailable'
+  }
+}
+async function playCommunityPost(id: string): Promise<void> {
+  if (!/^t3_[a-z0-9]+$/.test(id)) return
+  ++finishRequest
+  screen.value = 'loading'
+  notice.value = ''
+  try {
+    const response = await fetch(`/api/init?postId=${encodeURIComponent(id)}`)
+    if (!response.ok) throw new Error('Community level unavailable.')
+    const data = await response.json() as PostInitResponse
+    if (data.kind !== 'community' || !data.levelData) throw new Error('Community level unavailable.')
+    postLevel.value = { key: data.levelKey, title: data.title, data: data.levelData as LevelEntry['data'], difficulty: 'normal', par: null }
+    activePostId.value = data.postId
+    fromCommunity.value = true
+    postKind.value = 'community'
+    targetTicks.value = null
+    postClosesAt.value = data.closesAt ?? null
+    postClosed.value = typeof data.closesAt === 'number' && Date.now() >= data.closesAt
+    releasedLeaderboard.value = null
+    verification.value = ''
+    challengeStatus.value = ''
+    challengeUrl.value = ''
+    canPostResult.value = false
+    resultCommentStatus.value = ''
+    const board = await fetch(postApi('/api/leaderboard'))
+    if (board.ok) releasedLeaderboard.value = await board.json() as LeaderboardResponse
+    screen.value = 'postPlay'
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'Could not open community level.'
+    screen.value = 'menu'
+  }
+}
+function watchReplay(): void {
+  if (releasedLeaderboard.value?.released && releasedLeaderboard.value.entries.length) screen.value = 'replay'
+}
+function onCampaignFinished(run: { ticks: number; deaths: number; replay: string }): void {
   const level = activeLevel.value
   if (!level) return
   progress.value = recordResult(progress.value, level.key, run.ticks, run.deaths, level.par)
+  void onPostFinished(run)
 }
 async function onPostFinished(run: { ticks: number; deaths: number; replay: string }): Promise<void> {
-  const level = postLevel.value
+  canPostResult.value = false
+  resultRunId.value = ''
+  resultCommentStatus.value = ''
+  const campaign = screen.value === 'campaignPlay'
+  const level = campaign ? activeLevel.value : postLevel.value
   if (!level) return
   const request = ++finishRequest
   verification.value = 'Verifying replay…'
+  challengeStatus.value = ''
+  challengeUrl.value = ''
   try {
-    const response = await fetch('/api/verify', {
+    const response = await fetch(campaign ? '/api/verify-campaign' : postApi('/api/verify'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ levelKey: level.key, replay: run.replay }),
+      body: JSON.stringify({ levelKey: level.key, replay: run.replay, look: { ...look } }),
     })
     if (!response.ok) throw new Error('Replay could not be verified.')
     const verified = await response.json() as VerifyRunResponse
     if (request !== finishRequest) return
+    postClosed.value = verified.closed
+    canPostResult.value = verified.canPostResult
+    resultRunId.value = verified.resultRunId ?? ''
+    const savedMessage = verified.ticks !== run.ticks || verified.deaths !== run.deaths
+      ? 'Replay mismatch — result not accepted'
+      : verified.recorded && verified.improved
+        ? `Verified and saved: ${formatTicks(verified.ticks)} · ${verified.deaths} deaths`
+        : `Verified: ${formatTicks(verified.ticks)} · ${verified.deaths} deaths · personal best unchanged`
     verification.value = verified.ticks === run.ticks && verified.deaths === run.deaths
       ? `Verified: ${formatTicks(verified.ticks)} · ${verified.deaths} deaths`
       : 'Replay mismatch — result not accepted'
+    verification.value = savedMessage
+    if (campaign) return
+    try {
+      const leaderboardResponse = await fetch(postApi('/api/leaderboard'))
+      if (leaderboardResponse.ok) {
+        const board = await leaderboardResponse.json() as LeaderboardResponse
+        if (request === finishRequest) releasedLeaderboard.value = board
+      }
+    } catch { /* The result remains visible if the live board is temporarily unavailable. */ }
   } catch (error) {
     if (request === finishRequest) verification.value = error instanceof Error ? error.message : 'Verification failed.'
   }
+}
+async function createChallenge(): Promise<void> {
+  if (challengeStatus.value === 'Creating challenge…') return
+  const sourceScreen = screen.value
+  const sourceLevel = sourceScreen === 'campaignPlay' ? activeLevel.value : postLevel.value
+  const sourceFinishRequest = finishRequest
+  if (!sourceLevel) return
+  challengeStatus.value = 'Creating challenge…'
+  challengeUrl.value = ''
+  try {
+    const campaign = screen.value === 'campaignPlay' ? activeLevel.value : null
+    const response = await fetch('/api/create-challenge', {
+      method: 'POST',
+      ...(campaign ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ campaignLevelKey: campaign.key }) } : {}),
+    })
+    const data = await response.json() as { url?: string; postId?: string; levelKey?: string; error?: string }
+    if (sourceFinishRequest !== finishRequest || screen.value !== sourceScreen) return
+    if (!response.ok || !data.postId || data.levelKey !== sourceLevel.key) throw new Error(data.error ?? 'Challenge post could not be created for this level.')
+    if (!/^t3_[a-z0-9]+$/.test(data.postId)) throw new Error('Invalid challenge post ID.')
+    challengeStatus.value = 'Challenge created!'
+    challengeUrl.value = `https://www.reddit.com/comments/${data.postId.slice(3)}`
+  } catch (error) {
+    if (sourceFinishRequest === finishRequest && screen.value === sourceScreen) challengeStatus.value = error instanceof Error ? error.message : 'Challenge creation failed.'
+  }
+}
+async function postResultComment(): Promise<void> {
+  if (resultCommentStatus.value) return
+  resultCommentStatus.value = 'Posting…'
+  try {
+    const response = await fetch(postApi('/api/result-comment'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resultRunId: resultRunId.value }),
+    })
+    const result = await response.json() as { error?: string }
+    if (!response.ok) throw new Error(result.error ?? 'Could not post result.')
+    resultCommentStatus.value = 'Result posted!'
+    canPostResult.value = false
+  } catch (error) {
+    resultCommentStatus.value = ''
+    notice.value = error instanceof Error ? error.message : 'Could not post result.'
+    challengeStatus.value = notice.value
+  }
+}
+async function deleteMyData(): Promise<void> {
+  if (!confirmDelete.value || deleting.value) return
+  deleting.value = true
+  try {
+    const response = await fetch('/api/my-data', { method: 'DELETE' })
+    if (!response.ok) throw new Error('Could not delete your data. Please try again.')
+    Object.assign(look, DEFAULT_LOOK)
+    progress.value = {}
+    releasedLeaderboard.value = null
+    canPostResult.value = false
+    await nextTick()
+    const preferenceKeys = new Set(['plungee:look', 'plunge:progress:v1', 'plungee:audio', 'plunge:theme', 'plunge:difficulty', 'plungee:ghosts', 'plungee:editor-minimap'])
+    const localKeys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index))
+    for (const key of localKeys) {
+      if (key && (preferenceKeys.has(key) || key.startsWith('plunge:best:') || key.startsWith('plungee:ghost:'))) localStorage.removeItem(key)
+    }
+    notice.value = 'Your stored game data was deleted. Reddit posts and comments were not deleted.'
+    confirmDelete.value = false
+  } catch (error) { notice.value = error instanceof Error ? error.message : 'Deletion failed.' }
+  finally { deleting.value = false }
 }
 const cssVars = computed(() => ({
   '--bg1': theme.value.bgTop,
@@ -146,35 +326,70 @@ const menuText = computed(() => theme.value.id === 'memphis-dark' ? '#FFFFFF' : 
   <Transition name="screen" :duration="220">
     <GameView
       v-if="screen === 'postPlay' && postLevel"
-      :key="'post:' + postLevel.key"
+      :key="'post:' + activePostId"
       :level-data="postLevel.data"
-      :level-key="'devvit:post:' + postLevel.key"
+      :level-key="'devvit:post:' + activePostId"
       :theme="theme"
       :par="postLevel.par"
       :has-next="true"
-      next-text="Continue in Campaign ▶"
+      :next-text="fromCommunity ? 'Community levels' : 'Continue in Campaign ▶'"
       :verification="verification"
-      :intro="{ number: postLevelNumber, title: postLevel.title, label: 'Challenge' }"
-      exit-icon="▦"
-      exit-text="Campaign"
-      @exit="continueCampaign"
+      :can-post-result="canPostResult"
+      :result-comment-status="resultCommentStatus"
+      @post-result="postResultComment"
+      :allow-challenge="postKind === 'practice'"
+      :brag="postKind === 'challenge'"
+      :target-ticks="targetTicks"
+      :replay-available="Boolean(releasedLeaderboard?.released && releasedLeaderboard?.entries.length)"
+      :challenge-url="challengeUrl"
+      :challenge-status="challengeStatus"
+      :ghosts="releasedGhosts"
+      :leaderboard-entries="visibleLeaderboard"
+      :challenge-closed="postClosed"
+      :intro="{ number: postLevelNumber, title: postLevel.title, label: isWeeklyPost ? 'Weekly Challenge' : postKind === 'community' ? 'Community level' : 'Challenge' }"
+      exit-icon="☰"
+      exit-text="Main menu"
+      @exit="screen = 'menu'"
       @next="continueCampaign"
       @finished="onPostFinished"
+      @create-challenge="createChallenge"
+      @watch-replay="watchReplay"
+      @build-level="openEditor"
+      :allow-build="true"
+    />
+    <RaceView
+      v-else-if="screen === 'replay' && postLevel && releasedLeaderboard"
+      :level-data="postLevel.data"
+      :level-key="'replay:' + postLevel.key"
+      :title="isWeeklyPost ? `Weekly · ${postLevel.title}` : postLevel.title"
+      :theme="theme"
+      :entries="releasedLeaderboard.entries"
+      :your-rank="releasedLeaderboard.yourRank"
+      :your-entry="releasedLeaderboard.yourEntry"
+      @exit="screen = 'postPlay'"
     />
     <GameView
       v-else-if="screen === 'campaignPlay' && activeLevel"
       :key="'campaign:' + activeLevel.key"
+      :show-campaign-medal="true"
+      :allow-challenge="true"
+      :verification="verification"
+      :challenge-status="challengeStatus"
+      :challenge-url="challengeUrl"
+      @create-challenge="createChallenge"
       :level-data="activeLevel.data"
       :level-key="activeLevel.key"
       :theme="theme"
       :par="activeLevel.par"
       :has-next="hasNext"
       :intro="{ number: levelIdx + 1, title: activeLevel.title }"
-      exit-icon="▦"
-      exit-text="Level select"
-      @exit="screen = 'campaign'"
+      exit-icon="☰"
+      exit-text="Main menu"
+      @exit="screen = 'menu'"
       @next="startLevel(levelIdx + 1)"
       @finished="onCampaignFinished"
+      :allow-build="true"
+      @build-level="openEditor"
     />
     <CampaignView
       v-else-if="screen === 'campaign'"
@@ -185,10 +400,11 @@ const menuText = computed(() => theme.value.id === 'memphis-dark' ? '#FFFFFF' : 
       @exit="screen = 'menu'"
       @play="startLevel"
     />
+    <CommunityView v-else-if="screen === 'community'" :theme="theme" @exit="screen = 'menu'" @play="playCommunityPost" />
+    <EditorView v-else-if="screen === 'editor'" :theme="theme" @exit="screen = 'menu'" />
     <CharacterView
       v-else-if="screen === 'character'"
       :theme="baseTheme"
-      :reddit-name="redditName"
       @exit="screen = 'menu'"
     />
       <main v-else class="menu" :style="{ ...cssVars, '--menu-text': menuText }">
@@ -217,64 +433,20 @@ const menuText = computed(() => theme.value.id === 'memphis-dark' ? '#FFFFFF' : 
       <div v-if="screen === 'menu'" class="buttons">
         <button v-if="screen === 'menu'" class="play" type="button" @click="screen = 'campaign'">Campaign</button>
         <button v-if="screen === 'menu'" class="build" type="button" @click="screen = 'character'">Character</button>
-      </div>
-
-      <div v-if="screen === 'menu'" class="snd-row">
-        <button
-          class="mode"
-          type="button"
-          role="switch"
-          :aria-checked="dark"
-          aria-label="Dark mode"
-          :title="dark ? 'Switch to light mode' : 'Switch to dark mode'"
-          @click="dark = !dark"
-        >
-          <span class="opt" :class="{ on: !dark }" aria-hidden="true">☀</span>
-          <span class="opt" :class="{ on: dark }" aria-hidden="true">☾</span>
-        </button>
-        <button
-          class="snd"
-          :class="{ on: audioSettings.music }"
-          type="button"
-          role="switch"
-          :aria-checked="audioSettings.music"
-          @click="audioSettings.music = !audioSettings.music"
-        >
-          <SoundIcon kind="music" :on="audioSettings.music" :size="17" /> Music
-        </button>
-        <button
-          class="snd"
-          :class="{ on: audioSettings.sfx }"
-          type="button"
-          role="switch"
-          :aria-checked="audioSettings.sfx"
-          @click="audioSettings.sfx = !audioSettings.sfx"
-        >
-          <SoundIcon kind="sound" :on="audioSettings.sfx" :size="17" /> Sound
-        </button>
-        <button
-          class="snd"
-          :class="{ on: ghostSettings.self }"
-          type="button"
-          role="switch"
-          :aria-checked="ghostSettings.self"
-          title="Race your own best run as a ghost"
-          @click="ghostSettings.self = !ghostSettings.self"
-        >
-          <svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true">
-            <path
-              d="M3 14V7a5 5 0 0 1 10 0v7l-2-1.6L9 14l-1-1.6L7 14l-2-1.6z"
-              fill="currentColor"
-            />
-            <circle cx="6" cy="7" r="1.1" :fill="ghostSettings.self ? 'var(--accent)' : 'var(--bg2)'" />
-            <circle cx="10" cy="7" r="1.1" :fill="ghostSettings.self ? 'var(--accent)' : 'var(--bg2)'" />
-          </svg>
-          Ghost
-        </button>
+        <button class="build" type="button" @click="openEditor">Build a level</button>
+        <button class="build" type="button" @click="screen = 'community'">Community levels</button>
       </div>
 
       <p v-if="screen === 'loading'" class="status">Loading your challenge…</p>
       <p v-else-if="screen === 'error'" class="status" role="alert">{{ notice }}</p>
+      <p v-if="screen === 'menu' && notice" class="status" role="alert">{{ notice }}</p>
+      <a v-if="screen === 'menu'" class="data-link" href="#delete-data" @click.prevent="settingsOpen = true">Delete saved data</a>
+      <section v-if="screen === 'menu' && settingsOpen" id="delete-data" class="data-settings">
+        <h2>Delete my saved data</h2>
+        <p>Deletes your scores, replays, saved character snapshots, editor draft and published level data from Plungee. Your community levels will stop being playable. Reddit posts and comments remain.</p>
+        <label><input v-model="confirmDelete" type="checkbox" /> I understand this cannot be undone.</label>
+        <button class="build" type="button" :disabled="!confirmDelete || deleting" @click="deleteMyData">{{ deleting ? 'Deleting…' : 'Delete my saved data' }}</button>
+      </section>
 
       <ul v-if="screen === 'menu'" class="tips">
         <li><b>◀ ▶</b> to move, gravity does the rest</li>
@@ -423,34 +595,6 @@ h1 {
   transform: translate(2px, 2px);
 }
 
-.mode {
-  cursor: pointer;
-  display: flex;
-  padding: 2px;
-  gap: 2px;
-  font: inherit;
-  background: var(--panel);
-  border: 3px solid var(--line);
-  border-radius: 999px;
-}
-
-.opt {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 28px;
-  font-size: 16px;
-  line-height: 1;
-  font-weight: 800;
-  color: var(--muted);
-  border-radius: 999px;
-}
-
-.opt.on {
-  color: var(--outline);
-  background: var(--accent);
-}
-
 .tips {
   margin: 0;
   padding: 0;
@@ -476,33 +620,10 @@ h1 {
   text-underline-offset: 3px;
 }
 
-.snd-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-}
-
-.snd {
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--muted);
-  background: var(--bg2);
-  border: 3px solid var(--line);
-  border-radius: 999px;
-}
-
-.snd.on {
-  color: var(--outline);
-  background: var(--accent);
-}
-
 .status { margin: 0; font-weight: 800; text-align: center; color: var(--menu-text); }
+.data-settings { padding: 16px; color: var(--text); background: var(--panel); border: 2px solid var(--line); border-radius: 16px; }
+.data-link { color: var(--menu-text); font-size: 13px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.data-settings h2 { margin-top: 0; font-size: 18px; }
+.data-settings p, .data-settings label { font-size: 14px; line-height: 1.5; }
+.data-settings button { margin-top: 16px; min-width: 0; width: 100%; }
 </style>

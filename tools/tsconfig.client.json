@@ -14,7 +14,8 @@
     "exactOptionalPropertyTypes": false
   },
   "include": [
-    "../src/client/**/*"
+    "../src/client/**/*",
+    "../src/client/plungee/levels/par.json"
   ],
   "exclude": [],
   "references": [

@@ -16,7 +16,8 @@
     "../src/server/**/*",
     "../src/client/plungee/levels/**/*",
     "../src/client/plungee/sim/**/*",
-    "../src/client/plungee/editor/hash.ts"
+    "../src/client/plungee/editor/hash.ts",
+    "../src/client/plungee/levels/par.json"
   ],
   "exclude": [],
   "references": [

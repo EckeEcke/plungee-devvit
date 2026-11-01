@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { audioSettings, startMusic, stopMusic, toggleAllSound } from '../audio/audio'
 import SoundIcon from './SoundIcon.vue'
+import SkullIcon from './SkullIcon.vue'
+import MedalIcon from './MedalIcon.vue'
+import { medalFor } from '../game/medals'
 import { consumeControlsHint } from '../game/hintSeen'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { Game, type HudState } from '../game/game'
 import type { GhostSpec } from '../game/ghost'
 import type { Theme } from '../game/theme'
-import { medalFor, medalTargets } from '../game/medals'
+import type { LeaderboardEntry } from '../../../shared/api'
 import { compileLevel, formatTicks, type LevelData } from '../sim'
-import MedalIcon from './MedalIcon.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -18,19 +20,35 @@ const props = withDefaults(
     exitIcon?: string
     exitText?: string
     par?: number | null
+    showCampaignMedal?: boolean
     hasNext?: boolean
     intro?: { number: number; title: string; label?: string } | null
     nextText?: string
     verification?: string
+    allowChallenge?: boolean
+    replayAvailable?: boolean
+    challengeUrl?: string
+    challengeStatus?: string
+    leaderboardEntries?: LeaderboardEntry[]
+    challengeClosed?: boolean
+    allowBuild?: boolean
+    canPostResult?: boolean
+    brag?: boolean
+    targetTicks?: number | null
+    resultCommentStatus?: string
     /** Zusätzliche Ghosts (Top 5 eines Community-Levels) */
     ghosts?: GhostSpec[]
   }>(),
-  { exitIcon: '☰', exitText: 'Menu', par: null, hasNext: false, intro: null, nextText: 'Next level ▶', verification: '', ghosts: () => [] },
+  { exitIcon: '☰', exitText: 'Menu', par: null, hasNext: false, intro: null, nextText: 'Next level ▶', verification: '', allowChallenge: false, replayAvailable: false, challengeUrl: '', challengeStatus: '', leaderboardEntries: () => [], ghosts: () => [] },
 )
 const emit = defineEmits<{
   exit: []
   next: []
   finished: [result: { ticks: number; deaths: number; replay: string }]
+  createChallenge: []
+  watchReplay: []
+  buildLevel: []
+  postResult: []
 }>()
 
 const column = ref<HTMLElement | null>(null)
@@ -38,6 +56,7 @@ const canvas = ref<HTMLCanvasElement | null>(null)
 const hudBar = ref<HTMLElement | null>(null)
 const hud = shallowRef<HudState>({
   status: 'ready',
+  started: false,
   ticks: 0,
   deaths: 0,
   progress: 0,
@@ -46,6 +65,7 @@ const hud = shallowRef<HudState>({
   newBest: false,
   replay: '',
   race: [],
+  focusedRunner: null,
 })
 let game: Game | null = null
 
@@ -53,6 +73,7 @@ const cssVars = computed(() => ({
   '--panel': props.theme.ui.panel,
   '--text': props.theme.ui.text,
   '--accent': props.theme.ui.accent,
+  '--highlight': props.theme.ui.highlight,
   '--muted': props.theme.ui.muted,
   '--player': props.theme.player,
   '--bg1': props.theme.bgTop,
@@ -64,17 +85,17 @@ const cssVars = computed(() => ({
 }))
 
 const timeText = computed(() => formatTicks(hud.value.ticks))
+const campaignMedal = computed(() => props.showCampaignMedal && hud.value.status === 'finished'
+  ? medalFor(hud.value.ticks, hud.value.deaths, props.par) : null)
+const medalLabels = { gold: 'Gold', silver: 'Silver', bronze: 'Bronze' } as const
+const showNewBest = ref(false)
+const targets = ref({ gold: 0, silver: 0 })
 /** Local best time on this device; server verification is shown separately. */
-const showNewBest = computed(() => hud.value.newBest)
-const bestText = computed(() => (hud.value.bestTicks === null ? '–' : formatTicks(hud.value.bestTicks)))
-const medal = computed(() =>
-  hud.value.status === 'finished' ? medalFor(hud.value.ticks, hud.value.deaths, props.par) : null,
-)
-const targets = computed(() => (props.par === null ? null : medalTargets(props.par)))
-const MEDAL_TEXT = { gold: 'Gold', silver: 'Silver', bronze: 'Bronze' } as const
 // Steuerung nur im ersten Level der Sitzung zeigen
 const hintAllowed = consumeControlsHint()
+const requiresStart = hintAllowed
 const showHint = computed(() => hintAllowed && hud.value.status !== 'finished' && hud.value.ticks < 360)
+const showStart = computed(() => requiresStart && hud.value.status === 'ready' && !hud.value.started)
 
 /** Unterkante der Bedienleiste (plus etwas Luft) gemessen, damit das Level darunter beginnt und die Figur oben nie verdeckt wird */
 const HUD_GAP_PX = 8
@@ -97,6 +118,7 @@ onMounted(() => {
     game.setGhosts(props.ghosts)
     game.restart()
   }
+  if (!requiresStart) game.start()
   insetObs = new ResizeObserver(measureInset)
   insetObs.observe(column.value)
 })
@@ -127,16 +149,48 @@ function restart(): void {
   game?.restart()
 }
 
+function startGame(): void {
+  column.value?.focus()
+  game?.start()
+}
+
+const shareError = ref('')
+const shareStatus = ref('')
+async function shareChallenge(): Promise<void> {
+  shareError.value = ''
+  shareStatus.value = ''
+  const match = props.challengeUrl.match(/^https:\/\/www\.reddit\.com\/comments\/([a-z0-9]+)\/?$/i)
+  if (!match) {
+    shareError.value = 'Challenge not available to share.'
+    return
+  }
+  const url = `https://www.reddit.com/comments/${match[1]}`
+  try {
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ url, title: 'Plungee challenge', text: 'Can you beat my time?' })
+        return
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+      }
+    }
+    await navigator.clipboard.writeText(url)
+    shareStatus.value = 'Challenge link copied!'
+  } catch {
+    shareError.value = 'Could not share challenge. Please try again.'
+  }
+}
+
 </script>
 
 <template>
   <div class="stage" :style="cssVars">
-    <div ref="column" class="column">
+    <div ref="column" class="column" tabindex="-1">
       <canvas ref="canvas" class="canvas" />
 
-      <div ref="hudBar" class="hud" data-noinput>
+      <div ref="hudBar" class="hud" :class="{ 'with-target': targetTicks != null }" data-noinput>
         <div class="pill time">{{ timeText }}</div>
-        <div class="pill deaths" title="Deaths">✕ {{ hud.deaths }}</div>
+        <div class="pill deaths" title="Deaths" :aria-label="`${hud.deaths} deaths`"><SkullIcon :size="17" /> {{ hud.deaths }}</div>
         <div class="spacer" />
         <button
           class="pill btn"
@@ -148,6 +202,7 @@ function restart(): void {
         </button>
         <button class="pill btn" type="button" aria-label="Restart" @click="restart">↻</button>
         <button class="pill btn" type="button" :aria-label="exitText" @click="emit('exit')">{{ exitIcon }}</button>
+        <div v-if="targetTicks != null" class="target-time">Time to beat: <b>{{ formatTicks(targetTicks) }}</b></div>
       </div>
 
       <div class="progress" aria-hidden="true">
@@ -156,13 +211,17 @@ function restart(): void {
       </div>
 
       <Transition name="fadeout">
-        <div v-if="intro && hud.status === 'ready'" class="intro" aria-hidden="true">
+        <div v-if="intro && hud.status === 'ready' && !hud.started" class="intro" aria-hidden="true">
           <small>{{ intro.label ?? (intro.number > 0 ? 'Level ' + intro.number : 'Community level') }}</small>
           <b>{{ intro.title }}</b>
         </div>
       </Transition>
 
-      <div v-if="hud.status === 'ready'" class="countdown" aria-live="assertive">
+      <div v-if="showStart" class="start-overlay" data-noinput>
+        <button class="start-button" type="button" @click="startGame">Start</button>
+      </div>
+
+      <div v-if="hud.status === 'ready' && hud.started" class="countdown" aria-live="assertive">
         <span :key="hud.countdown">{{ hud.countdown }}</span>
       </div>
 
@@ -174,36 +233,55 @@ function restart(): void {
       <div v-if="hud.status === 'finished'" class="result" data-noinput>
         <div class="card">
           <div class="title">Finished!</div>
+          <p v-if="targetTicks != null" class="result-target">Time to beat: {{ formatTicks(targetTicks) }}</p>
           <div class="big">{{ timeText }}</div>
-          <div v-if="medal" class="medal">
-            <MedalIcon :medal="medal" :size="34" />
-            <b>{{ MEDAL_TEXT[medal] }}</b>
-          </div>
-          <div v-if="targets" class="goals">
+          <p v-if="challengeClosed" class="closed-note">Challenge ended · Practice only</p>
+          <div v-if="false" class="goals">
             <span>Gold with no deaths ≤ {{ formatTicks(targets.gold) }}</span>
             <span>Silver ≤ {{ formatTicks(targets.silver) }}</span>
           </div>
-          <div class="row">
-            <span>Deaths</span><b>{{ hud.deaths }}</b>
+          <div class="result-deaths" :aria-label="`${hud.deaths} deaths`">
+            <span class="death-label" aria-label="Deaths"><SkullIcon :size="17" /></span><b>{{ hud.deaths }}</b>
           </div>
-          <div class="row" :class="{ 'row-best': showNewBest }">
-            <span>Best</span><b>{{ bestText }}</b>
+          <div v-if="campaignMedal" class="medal">
+            <MedalIcon :medal="campaignMedal" :size="34" />
+            <b>{{ medalLabels[campaignMedal] }}</b>
           </div>
-          <div v-if="showNewBest" class="badges">
+          <div v-if="false" class="badges">
             <div v-if="showNewBest" class="badge">
               <i v-for="n in 8" :key="n" class="spark" :style="{ '--a': n * 45 + 'deg' }" aria-hidden="true" />
               <span class="badge-text">★ New best!</span>
             </div>
           </div>
-          <div v-if="verification" class="board" aria-live="polite">
-            <div class="board-head"><b>Challenge result</b></div>
-            <p class="board-note" :class="{ err: verification !== 'Verifying replay…' && !verification.startsWith('Verified:') }">{{ verification }}</p>
+          <div v-if="leaderboardEntries.length" class="live-leaderboard">
+            <h3>Leaderboard</h3>
+            <div v-for="entry in leaderboardEntries" :key="entry.rank + ':' + entry.username" class="leaderboard-row" :class="{ current: entry.isCurrentUser }">
+              <b>{{ entry.rank }}</b>
+              <span>{{ entry.isCurrentUser ? 'You' : (entry.username ?? 'Deleted user') }}</span>
+              <span class="leaderboard-stats"><span>{{ formatTicks(entry.ticks) }}</span><span aria-hidden="true">·</span><span class="leaderboard-deaths" :aria-label="`${entry.deaths} deaths`"><SkullIcon :size="15" />{{ entry.deaths }}</span></span>
+            </div>
+          </div>
+          <button
+            v-if="allowChallenge && verification.startsWith('Verified')"
+            class="ghost challenge"
+            type="button"
+            @click="emit('createChallenge')"
+          >Create challenge post</button>
+          <button v-if="replayAvailable" class="ghost replay-action" type="button" @click="emit('watchReplay')">Watch top-5 replay</button>
+          <button v-if="canPostResult" :class="brag ? 'ghost challenge' : 'ghost replay-action'" type="button" :disabled="Boolean(resultCommentStatus)" @click="emit('postResult')">{{ brag ? 'Brag' : 'Post my result' }}</button>
+          <p v-if="resultCommentStatus" role="status">{{ resultCommentStatus }}</p>
+          <div v-if="challengeStatus" class="challenge-feedback" role="status">
+            <b>{{ challengeStatus }}</b>
+            <button v-if="challengeUrl" class="ghost" type="button" @click="shareChallenge">Share challenge</button>
+            <span v-if="shareError" role="alert">{{ shareError }}</span>
+            <span v-if="shareStatus" role="status">{{ shareStatus }}</span>
           </div>
           <div class="actions">
-            <button class="cta" type="button" @click="restart">Retry</button>
-            <button class="ghost" type="button" @click="emit('exit')">{{ exitText }}</button>
+            <button :class="(allowChallenge && verification.startsWith('Verified')) || (brag && canPostResult) ? 'ghost' : 'cta'" type="button" @click="restart">{{ challengeClosed ? 'Practice' : 'Improve' }}</button>
+            <button v-if="!hasNext" class="ghost" type="button" @click="emit('exit')">{{ exitText }}</button>
           </div>
-          <button v-if="hasNext" class="cta next" type="button" @click="emit('next')">{{ nextText }}</button>
+          <button v-if="hasNext" class="ghost next" type="button" @click="emit('next')">{{ nextText }}</button>
+          <button v-if="allowBuild" class="ghost next" type="button" @click="emit('buildLevel')">Build a level</button>
         </div>
       </div>
       </Transition>
@@ -224,7 +302,9 @@ function restart(): void {
 
 .column {
   position: relative;
-  width: min(100%, 520px);
+  /* Keep the playable viewport portrait (at most 2:3), including desktop webviews. */
+  width: min(100%, 520px, 66.6667dvh);
+  flex: none;
   height: 100%;
   touch-action: none;
   overflow: hidden;
@@ -332,8 +412,8 @@ function restart(): void {
 .intro {
   position: absolute;
   left: 50%;
-  /* unten statt oben: die Figur startet in den obersten Reihen und darf nicht von der Karte verdeckt werden */
-  bottom: 24%;
+  /* Direkt über dem Start-Button, mit kompaktigem Abstand. */
+  bottom: calc(50% + 55px);
   transform: translateX(-50%);
   width: max-content;
   max-width: calc(100% - 40px);
@@ -361,6 +441,39 @@ function restart(): void {
   font-size: 24px;
   font-weight: 900;
   color: var(--accent);
+}
+
+.start-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.start-button {
+  pointer-events: auto;
+  cursor: pointer;
+  min-width: 180px;
+  padding: 14px 30px;
+  font: inherit;
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--outline);
+  background: var(--accent);
+  border: 4px solid var(--outline);
+  border-radius: 16px;
+  box-shadow: 5px 5px 0 var(--outline);
+}
+
+.start-button:active {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 var(--outline);
+}
+
+.start-button:focus-visible {
+  outline: 3px solid var(--text);
+  outline-offset: 5px;
 }
 
 @keyframes intro-in {
@@ -434,6 +547,21 @@ function restart(): void {
   padding: 20px;
   animation: fade 0.25s ease-out;
 }
+.live-leaderboard { margin: 16px 0 24px; padding-top: 10px; text-align: left; }
+.death-label, .pill.deaths { display: inline-flex; align-items: center; gap: 5px; }
+.result-deaths { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 2px 0 18px; color: var(--muted); font-size: 16px; }
+.result-deaths b { color: var(--text); }
+.hud.with-target { flex-wrap: wrap; }
+.target-time { flex: 0 0 100%; text-align: center; color: var(--text); font-size: 14px; font-weight: 800; }
+.target-time b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.result-target { margin: 0 0 4px; color: var(--muted); font-size: 14px; font-weight: 800; }
+.death-label :deep(svg), .pill.deaths :deep(svg) { display: block; flex: none; }
+.leaderboard-stats, .leaderboard-deaths { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.leaderboard-deaths :deep(svg) { display: block; flex: none; }
+.closed-note { margin: 8px 0; color: var(--muted); font-size: 13px; font-weight: 800; }
+.live-leaderboard h3 { margin: 0 0 6px; color: var(--accent); font-size: 16px; text-align: center; }
+.leaderboard-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 6px; padding: 4px 0; color: var(--muted); font-size: 12px; font-weight: 800; }
+.leaderboard-row.current { color: var(--outline); background: var(--highlight); border-radius: 7px; padding-left: 6px; padding-right: 6px; }
 
 @keyframes fade {
   from {
@@ -450,7 +578,7 @@ function restart(): void {
   color: var(--text);
   border: 3px solid var(--line);
   border-radius: 24px;
-  padding: 22px 22px 16px;
+  padding: 30px 22px 20px;
   text-align: center;
   box-shadow: 6px 6px 0 var(--outline);
   margin: auto;
@@ -460,12 +588,13 @@ function restart(): void {
   font-size: 26px;
   font-weight: 900;
   color: var(--accent);
+  margin-bottom: 6px;
 }
 
 .big {
   font-size: 56px;
   font-weight: 900;
-  margin: 4px 0 10px;
+  margin: 0 0 6px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -473,7 +602,6 @@ function restart(): void {
   display: flex;
   justify-content: space-between;
   padding: 6px 4px;
-  border-top: 1.5px dashed rgba(255, 255, 255, 0.18);
   font-size: 16px;
   color: var(--muted);
 }
@@ -506,9 +634,45 @@ function restart(): void {
   width: 100%;
   margin-top: 10px;
 }
-.next {
+
+.ghost.challenge {
+  width: 100%;
+  margin-top: 24px;
+  padding: 15px 12px;
+  font-size: 20px;
+  color: var(--outline);
+  background: var(--accent);
+  border-color: var(--outline);
+  box-shadow: 4px 4px 0 var(--outline);
+}
+
+.ghost.challenge:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 var(--outline);
+}
+
+.replay-action {
   width: 100%;
   margin-top: 10px;
+}
+
+.challenge-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+
+.next {
+  width: 100%;
+  margin-top: 14px;
 }
 
 .badges {
@@ -612,7 +776,6 @@ function restart(): void {
 
 .board {
   margin-top: 10px;
-  border-top: 1.5px dashed rgba(255, 255, 255, 0.18);
   padding-top: 8px;
   text-align: left;
 }

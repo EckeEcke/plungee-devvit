@@ -9,7 +9,8 @@ The Reddit app is named **Plungee**. The **Devvit app slug** is `plungee-game` a
 - Play opens `game.html` in expanded mode and **starts that post's level immediately**; no home-screen detour.
 - The post's `levelKey` is bound in `postData` when the test post is created, and validated server-side.
 - Original Plungee simulation, renderer, 67 campaign levels, audio, Character editor and Memphis light/dark themes are included.
-- On finish, `/api/verify` deterministically simulates the replay on the Devvit server. **This endpoint verifies only; it does not yet persist scores.**
+- On finish, `/api/verify` deterministically simulates the replay on the Devvit server and persists an improved personal score for the authenticated Reddit user.
+- Verified finishes are now persisted for the current Reddit user when `context.userId` is available. The browser never supplies identity data.
 - Finishing shows **Continue in Campaign**, where levels can be played sequentially. Campaign/character visuals are from the web version. Device-local campaign progress, character, audio and own best replay are temporary migration defaults, **not Reddit-account-backed data**.
 - A moderator's subreddit menu item **Create a Plungee test post** creates a test post; the app-install trigger also creates one.
 
@@ -44,14 +45,24 @@ npm run dev
 
 ## Explicitly not yet implemented
 
-- User-created **Can you beat my time?** posts, user-level posts, score comments, Redis leaderboard and per-post top-five replays
+- User-level posts, score comments and the client UI for released leaderboards/top-five ghosts
 - User ID–based persistence, retention/deletion and post deletion handlers
 - Weekly post scheduler, frozen seven-day standings, creator's optional result/replay post and next-visit reminder
 - UGC editor posting workflow (the browser editor and private links are **not** mounted in this milestone)
 - Separate Devvit-specific privacy documentation and Reddit production approval
 
-Do **not** treat the test post, client-side local best or `/api/verify` as a complete production social feature. Scores are not saved and no foreign ghosts are revealed during active competitions.
+Do **not** treat the test post, client-side local best or the current `/api/verify` response as a complete production social feature. Personal scores and the first challenge/leaderboard API are now persisted when Reddit identity is available; result comments, custom user levels and the frontend leaderboard/ghost presentation remain open.
+
+## Redis score foundation
+
+`/api/verify` always simulates the submitted replay before it can be stored. For an authenticated Reddit request, `src/server/core/scores.ts` stores the best verified result using:
+
+- `plungee:v1:post:<postId>:scores` — per-user score records for the post
+- `plungee:v1:post:<postId>:leaderboard` — sorted-set foundation ordered by verified ticks
+- `plungee:v1:user:<userId>:scores` — user index for future deletion and retention work
+
+The user ID and display name come from server-side `context.userId` and `context.username`; neither is accepted from the client. Score records expire after 90 days. Each record also contains the validated `color`, `eyes`, `pattern` and `patternColor` snapshot used for that best run. If the user improves the time with another character, the snapshot is replaced. `/api/leaderboard` releases only the top five records, including character snapshots and replays, after the challenge's seven-day close timestamp; before that it returns no foreign results.
 
 ## Build status
 
-Project files were prepared and the pure TypeScript simulation was compiled independently, but **full Vite / vue-tsc / on-Reddit playtest is not verified** in the preparation environment (Node 22; npm registry unavailable). Run `npm install`, `npm run test:types`, `npm run build`, and `npm run dev` on Node 24 before merging/deploying.
+The current workspace passes `npm run test:types` and `npm run build`. An on-Reddit playtest and deployment are still separate verification steps.

@@ -1,5 +1,6 @@
 import { reactive, watch } from 'vue'
 import { World, decodeInputs, simulate, type CompiledLevel, type InputDir } from '../sim'
+import type { Look } from './look'
 
 /**
  * Ghosts: gespielte Läufe, die als halbtransparente Figuren parallel zum eigenen Lauf mitlaufen.
@@ -16,6 +17,8 @@ export interface GhostSpec {
   color?: string
   /** Deckend statt blass (Rennen der Top 5) */
   solid?: boolean
+  /** Der beim Rekord gespeicherte Charakter-Look. */
+  look?: Look
 }
 
 /** Farben der Top-5-Ghosts nach Platz: kein Rot und kein Gelb (Gefahr, Ziel) */

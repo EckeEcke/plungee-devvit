@@ -112,10 +112,12 @@ function urlsOf(mods: Record<string, string>): Record<string, string> {
 }
 
 const SFX_URLS = urlsOf(
-  import.meta.glob('../assets/audio/sfx/*.mp3', { query: '?url', import: 'default', eager: true }) as Record<string, string>,
+  // Embed short effects so Devvit does not need to serve separate MP3 requests.
+  // dataUrlBuffer decodes these directly without a CSP-blocked fetch(data:...).
+  import.meta.glob('../assets/audio/sfx/*.mp3', { query: '?inline', import: 'default', eager: true }) as Record<string, string>,
 )
 const MUSIC_URLS = Object.entries(
-  urlsOf(import.meta.glob('../assets/audio/music/*.mp3', { query: '?url', import: 'default', eager: true }) as Record<string, string>),
+  urlsOf(import.meta.glob('../assets/audio/music/track{1,2,5}.mp3', { query: '?url', import: 'default', eager: true }) as Record<string, string>),
 )
   .sort(([a], [b]) => a.localeCompare(b))
   .map(([, url]) => url)
@@ -151,6 +153,29 @@ function decode(c: AudioContext, data: ArrayBuffer): Promise<AudioBuffer> {
   })
 }
 
+/** Devvit's webview blocks fetch(data:...) via connect-src. Decode bundled data URLs directly. */
+function dataUrlBuffer(url: string): ArrayBuffer | null {
+  if (!url.startsWith('data:')) return null
+  const comma = url.indexOf(',')
+  if (comma < 0) return null
+  const metadata = url.slice(5, comma)
+  const payload = url.slice(comma + 1)
+  if (metadata.toLowerCase().includes(';base64')) {
+    const bytes = Uint8Array.from(atob(payload), (char) => char.charCodeAt(0))
+    const buffer = new ArrayBuffer(bytes.byteLength)
+    new Uint8Array(buffer).set(bytes)
+    return buffer
+  }
+  return new TextEncoder().encode(decodeURIComponent(payload)).buffer
+}
+
+async function audioBufferData(url: string): Promise<ArrayBuffer | null> {
+  const embedded = dataUrlBuffer(url)
+  if (embedded) return embedded
+  const res = await fetch(url)
+  return res.ok ? res.arrayBuffer() : null
+}
+
 async function loadSfx(c: AudioContext): Promise<void> {
   const files = new Set([...Object.values(SFX).map((s) => s.file), ...Object.values(LOOPS).map((l) => l.file)])
   await Promise.all(
@@ -158,9 +183,9 @@ async function loadSfx(c: AudioContext): Promise<void> {
       const url = SFX_URLS[file]
       if (!url) return
       try {
-        const res = await fetch(url)
-        if (!res.ok) return
-        buffers.set(file, await decode(c, await res.arrayBuffer()))
+        const data = await audioBufferData(url)
+        if (!data) return
+        buffers.set(file, await decode(c, data))
       } catch {
         /* Datei nicht ladbar oder nicht dekodierbar: Sound bleibt stumm */
       }
