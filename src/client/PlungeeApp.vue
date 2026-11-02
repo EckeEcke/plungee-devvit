@@ -131,7 +131,7 @@ function startLevel(index: number): void {
   screen.value = 'campaignPlay'
 }
 function continueCampaign(): void {
-  if (postKind.value === 'community' || postKind.value === 'weekly') { screen.value = 'menu'; return }
+  if (postKind.value === 'community' || postKind.value === 'weekly' || postKind.value === 'challenge') { screen.value = 'menu'; return }
   if (postLevel.value) difficulty.value = postLevel.value.difficulty
   screen.value = 'campaign'
 }
@@ -323,7 +323,7 @@ const menuText = computed(() => theme.value.ui.text)
       :theme="theme"
       :par="postLevel.par"
       :has-next="true"
-      :next-text="postKind === 'community' || postKind === 'weekly' ? 'Main menu' : 'Continue in Campaign ▶'"
+      :next-text="postKind === 'community' || postKind === 'weekly' || postKind === 'challenge' ? 'Main menu' : 'Continue in Campaign ▶'"
       :verification="verification"
       :can-post-result="canPostResult"
       :result-comment-status="resultCommentStatus"
