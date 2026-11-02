@@ -33,7 +33,7 @@ const props = withDefaults(
     challengeStatus?: string
     leaderboardEntries?: LeaderboardEntry[]
     challengeClosed?: boolean
-    allowBuild?: boolean
+    allowMainMenu?: boolean
     canPublishLevel?: boolean
     canPostResult?: boolean
     brag?: boolean
@@ -50,7 +50,6 @@ const emit = defineEmits<{
   finished: [result: { ticks: number; deaths: number; replay: string }]
   createChallenge: []
   watchReplay: []
-  buildLevel: []
   postResult: []
   publishLevel: []
 }>()
@@ -336,7 +335,7 @@ async function shareChallenge(): Promise<void> {
             <button v-if="!hasNext" class="ghost" type="button" @click="emit('exit')">{{ exitText }}</button>
           </div>
           <button v-if="hasNext" class="ghost next" type="button" @click="emit('next')">{{ nextText }}</button>
-          <button v-if="allowBuild" class="ghost next" type="button" @click="emit('buildLevel')">Build a level</button>
+          <button v-if="allowMainMenu && hasNext" class="ghost next" type="button" @click="emit('exit')">Main menu</button>
         </div>
       </div>
       </Transition>

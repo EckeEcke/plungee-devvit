@@ -35,6 +35,26 @@ body {
   color: var(--text);
 }
 
+.menu-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: var(--muted);
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.menu-button:hover { color: var(--text); }
+.menu-button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.menu-button:active { transform: translateY(2px); }
+
 .decor {
   position: absolute;
   inset: 0;

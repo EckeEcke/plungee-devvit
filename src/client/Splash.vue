@@ -134,10 +134,16 @@ function play(event: MouseEvent): void {
 function watchReplays(event: MouseEvent): void {
   void requestExpandedMode(event, 'replays', { title: 'Plungee Replays' })
 }
+function openMenu(event: MouseEvent): void {
+  void requestExpandedMode(event, 'menu', { title: 'Plungee' })
+}
 </script>
 
 <template>
   <main class="preview" :style="vars">
+    <button class="menu-button" type="button" aria-label="Main menu" title="Main menu" @click="openMenu">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+    </button>
     <svg
       class="decor"
       viewBox="0 0 1000 650"

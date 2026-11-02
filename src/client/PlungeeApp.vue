@@ -87,6 +87,10 @@ const visibleLeaderboard = computed(() => {
 const isWeeklyPost = computed(() => postKind.value === 'weekly')
 
 async function initialize(): Promise<void> {
+  if (window.location.pathname.endsWith('/menu.html')) {
+    screen.value = 'menu'
+    return
+  }
   try {
     const response = await fetch('/api/init')
     if (!response.ok) throw new Error('This Plungee post has no available level.')
@@ -345,8 +349,7 @@ const menuText = computed(() => theme.value.ui.text)
       @finished="onPostFinished"
       @create-challenge="createChallenge"
       @watch-replay="watchReplay"
-      @build-level="openEditor"
-      :allow-build="true"
+      :allow-main-menu="postKind === 'practice'"
     />
     <RaceView
       v-else-if="screen === 'replay' && postLevel && releasedLeaderboard"
@@ -379,8 +382,7 @@ const menuText = computed(() => theme.value.ui.text)
       @exit="screen = 'menu'"
       @next="startLevel(levelIdx + 1)"
       @finished="onCampaignFinished"
-      :allow-build="true"
-      @build-level="openEditor"
+      :allow-main-menu="true"
     />
     <CampaignView
       v-else-if="screen === 'campaign'"
