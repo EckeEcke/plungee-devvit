@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import SkullIcon from './SkullIcon.vue'
-import { startMusic, stopMusic } from '../audio/audio'
+import SoundIcon from './SoundIcon.vue'
+import { audioSettings, audioState, startMusic, stopMusic, toggleAllSound } from '../audio/audio'
 import { Game, type HudState } from '../game/game'
 import { GHOST_COLORS, type GhostSpec } from '../game/ghost'
 import { applyLook, sanitizeLook } from '../game/look'
@@ -67,6 +68,11 @@ function measureInset(): void {
 
 function watchAgain(): void {
   game?.restart()
+  startReplay()
+}
+
+function startReplay(): void {
+  startMusic()
   game?.start()
 }
 
@@ -87,7 +93,8 @@ onMounted(() => {
     return
   }
   game.restart()
-  game.start()
+  // The click in the inline preview does not unlock audio in a new expanded webview.
+  if (audioState().context === 'running') startReplay()
   measureInset()
   insetObs = new ResizeObserver(measureInset)
   insetObs.observe(column.value)
@@ -109,6 +116,9 @@ onBeforeUnmount(() => {
         <span class="pill time">{{ formatTicks(hud.ticks) }}</span>
         <span class="pill title">Replay · {{ title }}</span>
         <span class="spacer" />
+        <button class="pill btn" type="button" :aria-label="audioSettings.sfx || audioSettings.music ? 'Mute' : 'Unmute'" @click="toggleAllSound">
+          <SoundIcon :on="audioSettings.sfx || audioSettings.music" :size="18" />
+        </button>
         <button class="pill btn" type="button" aria-label="Watch again" @click="watchAgain">↻</button>
         <button class="pill btn" type="button" aria-label="Back" @click="emit('exit')">×</button>
       </div>
@@ -128,7 +138,10 @@ onBeforeUnmount(() => {
         Your rank {{ yourRank }} · {{ formatTicks(yourEntry.ticks) }} · <span aria-label="Deaths"><SkullIcon :size="15" /></span> {{ yourEntry.deaths }}
       </div>
 
-      <div v-if="hud.status === 'ready' && !failed" class="countdown" aria-live="assertive">
+      <div v-if="hud.status === 'ready' && !hud.started && !failed" class="start-overlay">
+        <button class="start-button" type="button" @click="startReplay">Watch replays</button>
+      </div>
+      <div v-if="hud.status === 'ready' && hud.started && !failed" class="countdown" aria-live="assertive">
         <span :key="hud.countdown">{{ hud.countdown }}</span>
       </div>
 
@@ -165,6 +178,10 @@ onBeforeUnmount(() => {
 .stage { position: fixed; inset: 0; display: flex; justify-content: center; background: var(--surround); touch-action: none; }
 .column { position: relative; width: min(100%, 520px, 66.6667dvh); flex: none; height: 100%; overflow: hidden; background: linear-gradient(180deg, var(--bg1), var(--bg2)); box-shadow: 0 0 0 4px var(--frame); }
 .canvas { display: block; }
+.start-overlay { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.start-button { pointer-events: auto; cursor: pointer; min-width: 180px; padding: 14px 30px; font: inherit; font-size: 24px; font-weight: 900; color: var(--outline); background: var(--accent); border: 4px solid var(--outline); border-radius: 16px; box-shadow: 5px 5px 0 var(--outline); }
+.start-button:active { transform: translate(3px, 3px); box-shadow: 2px 2px 0 var(--outline); }
+.start-button:focus-visible { outline: 3px solid var(--text); outline-offset: 5px; }
 .hud { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 10px; right: 10px; display: flex; gap: 8px; align-items: center; }
 .spacer { flex: 1; }
 .pill { background: var(--panel); color: var(--text); border: 2px solid var(--line); border-radius: 999px; padding: 6px 14px; font-weight: 800; font-size: 16px; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; }

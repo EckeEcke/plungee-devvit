@@ -10,11 +10,11 @@
     "deploy": "npm run test:types && npm run lint && devvit upload",
     "dev": "devvit playtest",
     "launch": "npm run deploy && devvit publish",
-    "lint": "eslint 'src/**/*.{ts,tsx}'",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "login": "devvit login",
     "prettier": "prettier --write .",
     "test:types": "tsc --build && vue-tsc --noEmit -p tools/tsconfig.client.json",
-    "test:unit": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test \"src/**/*.test.ts\""
+    "test:unit": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test \"src/**/*.test.ts\" \"tools/*.test.mjs\""
   },
   "engines": {
     "node": ">=24.0.0"

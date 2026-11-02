@@ -7,9 +7,5 @@ let seenInMemory = false
 export function consumeControlsHint(): boolean {
   if (seenInMemory) return false
   seenInMemory = true
-  try {
-  } catch {
-    /* Speicher nicht verfügbar */
-  }
   return true
 }

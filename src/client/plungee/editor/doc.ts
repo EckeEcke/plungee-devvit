@@ -370,7 +370,7 @@ export class EditorDoc {
     const outer = this.depth > 0
     if (!outer) this.startSnap = this.serialize()
     this.depth++
-    let changed = false
+    let changed: boolean
     try {
       changed = fn()
     } finally {

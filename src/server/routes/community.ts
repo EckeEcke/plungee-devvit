@@ -5,6 +5,7 @@ import { levelHash } from '../../client/plungee/editor/hash'
 import type { CommunityLevelMeta } from '../../shared/api'
 import { indexCommunityBatch } from '../core/catalog'
 import { isCommunityBlocked } from '../core/moderation'
+import { hasControlCharacters } from '../../shared/text'
 
 export const community = new Hono()
 const TTL = 90 * 86400
@@ -80,7 +81,7 @@ community.post('/community', async c => {
   if (text.length > 200000) return c.json({ error: 'Level too large.' }, 413)
   try {
     const value = JSON.parse(text) as { title: string; level: LevelData; replay: string }
-    if (typeof value.title !== 'string' || value.title.trim().length < 3 || value.title.trim().length > 32 || /[\u0000-\u001f]/.test(value.title)) throw new Error('Invalid title.')
+    if (typeof value.title !== 'string' || value.title.trim().length < 3 || value.title.trim().length > 32 || hasControlCharacters(value.title)) throw new Error('Invalid title.')
     if (!value.level || typeof value.replay !== 'string' || value.replay.length > 120000) throw new Error('Invalid level or replay.')
     value.level.title = value.title.trim()
     if (validateLevel(value.level).length) throw new Error('Invalid level.')

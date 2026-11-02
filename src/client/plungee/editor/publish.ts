@@ -1,6 +1,7 @@
 import type { LevelData } from '../sim'
+import { hasControlCharacters } from '../../../shared/text'
 export function nameProblem(title: string): string | null {
-  return /[\u0000-\u001f]/.test(title) ? 'Invalid title' : null
+  return hasControlCharacters(title) ? 'Invalid title' : null
 }
 export async function uploadLevel(title: string, level: LevelData, replay: string): Promise<string> {
   const response = await fetch('/api/community', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, level, replay }) })
