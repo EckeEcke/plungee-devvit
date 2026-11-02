@@ -56,6 +56,8 @@ const COUNTDOWN_STEP_MS = 650
  * Die Simulation läuft mit festem Takt, gezeichnet wird mit Interpolation.
  */
 export class Game {
+  /** Optional community telemetry; null begins a new attempt, strings are replay checkpoints. */
+  onRunActivity?: (replay: string | null) => void
   private renderer: Renderer
   private input: InputController
   private world!: World
@@ -252,6 +254,7 @@ export class Game {
       this.countdownMs -= dtMs
       if (this.countdownMs <= 0) {
         this.status = 'running'
+        if (!this.spectator) this.onRunActivity?.(null)
         this.acc = 0
         playSfx('go')
       } else {
@@ -269,7 +272,11 @@ export class Game {
         this.acc -= STEP_MS
         const dir: InputDir = this.spectator ? ((this.spectator[this.world.tick] ?? 0) as InputDir) : this.input.dir
         if (!this.spectator && this.inputCount < MAX_REPLAY_TICKS) this.inputs[this.inputCount++] = dir
+        const previousDeaths = this.world.deaths
         this.world.step(dir)
+        if (!this.spectator && this.onRunActivity && (this.world.deaths !== previousDeaths || this.world.finished)) {
+          this.onRunActivity(encodeInputs(this.inputs.subarray(0, this.inputCount)))
+        }
         for (const g of ghosts) g.step()
         this.advanceReplayCamera()
         // Zuschauer: erst wenn alle im Ziel sind (der Führende ist es zuerst)

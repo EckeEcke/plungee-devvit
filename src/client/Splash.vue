@@ -160,7 +160,7 @@ function watchReplays(event: MouseEvent): void {
 
       <template v-if="level">
         <button class="play" type="button" @click="play">
-          ▶ Play
+          ▶ {{ postKind === 'challenge' ? 'Accept challenge' : 'Play' }}
         </button>
         <button v-if="replaysAvailable" class="watch-replays" type="button" @click="watchReplays">Watch replays</button>
 
@@ -203,7 +203,10 @@ function watchReplays(event: MouseEvent): void {
       </template>
 
       <p v-else-if="loading" class="status">Loading challenge…</p>
-      <p v-else role="alert" class="status">{{ error }}</p>
+      <template v-else>
+        <p role="alert" class="status">{{ error }}</p>
+        <button class="play" type="button" @click="play">▶ Play</button>
+      </template>
 
       <p class="controls">◀ ▶ to move · Gravity does the rest</p>
     </div>

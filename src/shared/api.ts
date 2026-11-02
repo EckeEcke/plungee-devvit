@@ -60,4 +60,12 @@ export type CommunityLevelMeta = {
   author: string
   size: string
   createdAt: number
+  stats?: CommunityStats
+}
+
+export type CommunityStats = {
+  players: number
+  clears: number
+  deaths: number
+  firstClear: { username: string | null; at: number } | null
 }

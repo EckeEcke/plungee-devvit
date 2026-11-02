@@ -115,7 +115,8 @@ async function initialize(): Promise<void> {
       : 'postPlay'
   } catch (error) {
     notice.value = error instanceof Error ? error.message : 'Could not open level.'
-    screen.value = 'error'
+    // An unavailable post must not prevent access to the rest of Plungee.
+    screen.value = 'menu'
   }
 }
 onMounted(() => { void initialize() })
@@ -130,7 +131,7 @@ function startLevel(index: number): void {
   screen.value = 'campaignPlay'
 }
 function continueCampaign(): void {
-  if (postKind.value === 'community') { screen.value = 'menu'; return }
+  if (postKind.value === 'community' || postKind.value === 'weekly') { screen.value = 'menu'; return }
   if (postLevel.value) difficulty.value = postLevel.value.difficulty
   screen.value = 'campaign'
 }
@@ -318,10 +319,11 @@ const menuText = computed(() => theme.value.ui.text)
       :key="'post:' + activePostId"
       :level-data="postLevel.data"
       :level-key="'devvit:post:' + activePostId"
+      :community-post-id="postKind === 'community' ? activePostId : undefined"
       :theme="theme"
       :par="postLevel.par"
       :has-next="true"
-      :next-text="postKind === 'community' ? 'Main menu' : 'Continue in Campaign ▶'"
+      :next-text="postKind === 'community' || postKind === 'weekly' ? 'Main menu' : 'Continue in Campaign ▶'"
       :verification="verification"
       :can-post-result="canPostResult"
       :result-comment-status="resultCommentStatus"

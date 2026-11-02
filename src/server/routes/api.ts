@@ -8,6 +8,7 @@ import type { ApiError, LeaderboardResponse, PostInitResponse, VerifyRunResponse
 import { createChallengePost } from '../core/post'
 import { getPersonalBest, getReleasedLeaderboard, recordVerifiedScore } from '../core/scores'
 import { isCommunityBlocked } from '../core/moderation'
+import { startCommunityRun, updateCommunityRun } from '../core/community-stats'
 
 export const api = new Hono()
 api.use('*', async (c, next) => {
@@ -217,6 +218,27 @@ api.get('/leaderboard', async (c) => {
 })
 
 /** Re-simulate untrusted browser inputs on the server before persisting a personal best. */
+api.post('/community-run', async c => {
+  if (!context.userId) return c.json({ error: 'Sign in required.' }, 401)
+  try {
+    const { postId, raw } = await resolvePlayPost(c.req.query('postId'))
+    if (!postId || raw?.kind !== 'community') return c.json({ error: 'Community level unavailable.' }, 404)
+    const level = await postLevel(raw, postId)
+    if (!level) return c.json({ error: 'Community level unavailable.' }, 404)
+    const text = await c.req.text()
+    if (text.length > 130000) return c.json({ error: 'Replay too large.' }, 413)
+    const value = JSON.parse(text) as { runId?: unknown; replay?: unknown }
+    if (value.runId === undefined) return c.json({ runId: await startCommunityRun(postId, raw.creatorUserId) })
+    if (typeof value.runId !== 'string' || !/^[a-f0-9-]{36}$/.test(value.runId) || typeof value.replay !== 'string' || !value.replay || value.replay.length > 120000) return c.json({ error: 'Invalid run.' }, 400)
+    const result = simulate(compileLevel(level.data), decodeInputs(value.replay))
+    await updateCommunityRun(postId, value.runId, value.replay, result)
+    return c.json({ saved: true })
+  } catch (error) {
+    console.error('Community statistics update failed', error)
+    return c.json({ error: 'Could not update community statistics.' }, 400)
+  }
+})
+
 api.post('/verify', async (c) => {
   let target
   try { target = await resolvePlayPost(c.req.query('postId')) }

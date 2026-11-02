@@ -1,6 +1,7 @@
 
 <script setup lang="ts">
 import PageShell from './PageShell.vue'
+import SkullIcon from './SkullIcon.vue'
 
 import { computed, onMounted, ref } from 'vue'
 import type { Theme } from '../game/theme'
@@ -121,6 +122,12 @@ const SIZE_TEXT: Record<string, string> = {
                 {{ SIZE_TEXT[l.size] ?? l.size }} ·
                 {{ ago(l.createdAt) }}
               </span>
+              <span class="p community-stats">
+                <span>{{ l.stats?.players ?? 0 }} played</span>
+                <span>{{ l.stats?.clears ?? 0 }} cleared</span>
+                <span class="death-stat" :aria-label="`${l.stats?.deaths ?? 0} deaths`"><SkullIcon :size="15" />{{ l.stats?.deaths ?? 0 }}</span>
+              </span>
+              <span v-if="l.stats?.firstClear" class="p fc"><svg class="flag" viewBox="0 0 12 14" fill="currentColor" aria-hidden="true"><path d="M1 0h1v14H1zM3 1h8L8 4l3 3H3z" /></svg><span class="fc-name">First clear: {{ l.stats.firstClear.username ?? 'Deleted user' }}</span></span>
 
             </button>
           </li>
@@ -316,6 +323,9 @@ const SIZE_TEXT: Record<string, string> = {
   font-weight: 700;
   color: var(--muted);
 }
+.community-stats { flex-wrap: wrap; margin-top: 6px; }
+.death-stat { display: inline-flex; align-items: center; gap: 4px; }
+.death-stat :deep(svg) { display: block; }
 
 .p {
   display: flex;

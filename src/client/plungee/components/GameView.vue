@@ -7,6 +7,7 @@ import { medalFor } from '../game/medals'
 import { consumeControlsHint } from '../game/hintSeen'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { Game, type HudState } from '../game/game'
+import { communityTracker } from '../game/community-stats'
 import type { GhostSpec } from '../game/ghost'
 import type { Theme } from '../game/theme'
 import type { LeaderboardEntry } from '../../../shared/api'
@@ -16,6 +17,7 @@ const props = withDefaults(
   defineProps<{
     levelData: LevelData
     levelKey: string
+    communityPostId?: string
     theme: Theme
     exitIcon?: string
     exitText?: string
@@ -125,6 +127,7 @@ onMounted(() => {
   game = new Game(canvas.value, column.value, props.theme, (h) => {
     hud.value = h
   })
+  if (props.communityPostId) game.onRunActivity = communityTracker(props.communityPostId)
   measureInset()
   game.load(compileLevel(props.levelData), props.levelKey)
   if (props.ghosts.length > 0) {
@@ -190,10 +193,8 @@ function startGame(): void {
 }
 
 const shareError = ref('')
-const shareStatus = ref('')
 async function shareChallenge(): Promise<void> {
   shareError.value = ''
-  shareStatus.value = ''
   const match = props.challengeUrl.match(/^https:\/\/www\.reddit\.com\/comments\/([a-z0-9]+)\/?$/i)
   if (!match) {
     shareError.value = 'Challenge not available to share.'
@@ -210,7 +211,6 @@ async function shareChallenge(): Promise<void> {
       }
     }
     await navigator.clipboard.writeText(url)
-    shareStatus.value = 'Challenge link copied!'
   } catch {
     shareError.value = 'Could not share challenge. Please try again.'
   }
@@ -303,28 +303,36 @@ async function shareChallenge(): Promise<void> {
           <div v-if="allowChallenge" class="challenge-action-slot" :aria-busy="challengePending">
             <button
               class="ghost challenge"
-              :class="{ 'pending-action': !challengeReady }"
-              :disabled="!challengeReady || challengeStatus === 'Creating challenge…'"
+              :class="{ 'pending-action': !challengeReady || Boolean(challengeUrl) || challengeStatus === 'Creating challenge…' }"
+              :disabled="!challengeReady || Boolean(challengeUrl) || challengeStatus === 'Creating challenge…'"
               type="button"
               @click="emit('createChallenge')"
-            >Create challenge post</button>
-            <div v-if="!challengeReady" class="challenge-action-state" role="status">
+            >{{ challengeStatus && !challengeUrl && challengeStatus !== 'Creating challenge…' ? challengeStatus + ' — Retry' : 'Create challenge post' }}</button>
+            <div v-if="!challengeReady && !challengeUrl" class="challenge-action-state" role="status">
               <template v-if="challengePending"><span class="verification-spinner" aria-hidden="true" /><span>Checking run…</span></template>
               <span v-else>{{ verification }}</span>
             </div>
+          <div v-if="challengeUrl || (challengeReady && challengeStatus === 'Creating challenge…')" class="challenge-feedback" role="status">
+            <div v-if="challengeUrl" class="challenge-created">
+              <b class="challenge-created-label"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>Challenge created</b>
+              <button class="ghost share-icon" type="button" aria-label="Share challenge" title="Share challenge" @click="shareChallenge"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8.6 10.5 6.8-4m-6.8 7 6.8 4" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="5" r="3" /><circle cx="18" cy="19" r="3" /></svg></button>
+            </div>
+            <b v-else>{{ challengeStatus }}</b>
+            <span v-if="shareError" role="alert">{{ shareError }}</span>
+          </div>
           </div>
           <button v-if="replayAvailable" class="ghost replay-action" type="button" @click="emit('watchReplay')">Watch top-5 replay</button>
           <button v-if="canPublishLevel" class="ghost challenge" type="button" @click="emit('publishLevel')">Publish level</button>
-          <button v-if="canPostResult" :class="brag ? 'ghost challenge brag-pop' : 'ghost replay-action'" type="button" :disabled="Boolean(resultCommentStatus)" @click="emit('postResult')">{{ brag ? 'Brag' : 'Post my result' }}</button>
-          <p v-if="resultCommentStatus" role="status">{{ resultCommentStatus }}</p>
-          <div v-if="challengeStatus" class="challenge-feedback" role="status">
-            <b>{{ challengeStatus }}</b>
-            <button v-if="challengeUrl" class="ghost" type="button" @click="shareChallenge">Share challenge</button>
-            <span v-if="shareError" role="alert">{{ shareError }}</span>
-            <span v-if="shareStatus" role="status">{{ shareStatus }}</span>
+          <div v-if="canPostResult || resultCommentStatus" class="result-action-slot" :class="{ 'brag-slot': brag }" :aria-busy="resultCommentStatus === 'Posting…'">
+            <button :class="[brag ? 'ghost challenge brag-pop' : 'ghost replay-action', { 'pending-action': Boolean(resultCommentStatus) }]" type="button" :disabled="Boolean(resultCommentStatus)" @click="emit('postResult')">{{ brag ? 'Brag' : 'Post my result' }}</button>
+            <div v-if="resultCommentStatus" class="challenge-action-state" :class="{ 'result-posted': resultCommentStatus === 'Result posted!' }" role="status">
+              <span v-if="resultCommentStatus === 'Posting…'" class="verification-spinner" aria-hidden="true" />
+              <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
+              <span>{{ resultCommentStatus }}</span>
+            </div>
           </div>
           <div class="actions">
-            <button :class="allowChallenge || canPublishLevel || (brag && canPostResult) ? 'ghost' : 'cta'" type="button" @click="restart">{{ challengeClosed ? 'Practice' : 'Improve' }}</button>
+            <button :class="allowChallenge || canPublishLevel || (brag && (canPostResult || resultCommentStatus)) ? 'ghost' : 'cta'" type="button" @click="restart">{{ challengeClosed ? 'Practice' : 'Improve' }}</button>
             <button v-if="!hasNext" class="ghost" type="button" @click="emit('exit')">{{ exitText }}</button>
           </div>
           <button v-if="hasNext" class="ghost next" type="button" @click="emit('next')">{{ nextText }}</button>
@@ -701,8 +709,12 @@ async function shareChallenge(): Promise<void> {
   transform: translate(3px, 3px);
   box-shadow: 1px 1px 0 var(--outline);
 }
-.challenge-action-slot { position: relative; display: grid; margin-top: 24px; }
+.challenge-action-slot { position: relative; display: grid; height: 70px; margin-top: 24px; }
 .challenge-action-slot .challenge { margin-top: 0; }
+.result-action-slot { position: relative; display: grid; margin-top: 10px; }
+.result-action-slot.brag-slot { margin-top: 24px; }
+.result-action-slot > button { margin-top: 0; }
+.challenge-action-state.result-posted { color: var(--success); }
 .pending-action { visibility: hidden; }
 .challenge-action-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: 14px; font-weight: 800; }
 .verification-spinner { width: 22px; height: 22px; flex: none; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: verification-spin 0.8s linear infinite; }
@@ -716,17 +728,20 @@ async function shareChallenge(): Promise<void> {
 }
 
 .challenge-feedback {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 5px;
-  margin-top: 12px;
-  padding: 10px 12px;
   color: var(--text);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border: 2px solid var(--line);
-  border-radius: 12px;
   font-size: 14px;
 }
+.challenge-created { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.challenge-created-label { display: inline-flex; align-items: center; gap: 6px; color: var(--success); }
+.challenge-created-label svg { flex: none; }
+.ghost.share-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; flex: none; }
 
 
 .next {

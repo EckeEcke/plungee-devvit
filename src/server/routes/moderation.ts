@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { context, redis, reddit } from '@devvit/web/server'
 import { canModerateLevels, moderationKey } from '../core/moderation'
 import type { CommunityLevelMeta } from '../../shared/api'
+import { deleteCommunityStats } from '../core/community-stats'
 
 export const moderation = new Hono()
 moderation.use('*', async (c, next) => {
@@ -45,6 +46,7 @@ moderation.post('/levels/:postId', async c => {
     if (input.confirmation !== id || !await redis.get(key)) return c.json({ error: 'Unpublish the level and confirm its deletion first.' }, 409)
     // Keep a block marker while deleting so in-flight index requests cannot republish it.
     await redis.set(key, JSON.stringify({ action: 'delete', userId: String(context.userId), at: Date.now() }))
+    await deleteCommunityStats(id)
     const scores = await redis.hGetAll(`plungee:v1:post:${id}:scores`)
     for (const userId of Object.keys(scores)) {
       await redis.hDel(`plungee:v1:user:${userId}:scores`, [id])

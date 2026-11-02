@@ -6,6 +6,7 @@ import type { CommunityLevelMeta } from '../../shared/api'
 import { indexCommunityBatch } from '../core/catalog'
 import { isCommunityBlocked } from '../core/moderation'
 import { hasControlCharacters } from '../../shared/text'
+import { getCommunityStats, deleteCommunityStats, deleteOwnCommunityStats } from '../core/community-stats'
 
 export const community = new Hono()
 const TTL = 90 * 86400
@@ -49,7 +50,8 @@ community.get('/community', async c => {
     }
     levels.push(JSON.parse(meta) as CommunityLevelMeta)
   }
-  return c.json({ levels: levels.slice(offset, offset + limit), total: levels.length })
+  const page = await Promise.all(levels.slice(offset, offset + limit).map(async level => ({ ...level, stats: await getCommunityStats(level.id) })))
+  return c.json({ levels: page, total: levels.length })
 })
 
 community.get('/editor/draft', async c => {
@@ -120,10 +122,12 @@ community.post('/community', async c => {
 /** Removes this user's stored community-level data; never deletes their Reddit posts. */
 community.delete('/community/mine', async c => {
   if (!context.userId) return c.json({ error: 'Sign in required.' }, 401)
+  await deleteOwnCommunityStats()
   const userKey = `plungee:v2:user:${context.userId}:levels`
   const legacyKey = `plungee:v1:user:${context.userId}:levels`
   const levels = { ...await redis.hGetAll(legacyKey), ...await redis.hGetAll(userKey) }
   for (const postId of Object.keys(levels)) {
+    await deleteCommunityStats(postId)
     await redis.del(`plungee:v1:post:${postId}:level`)
     await redis.del(metaKey(postId))
     await redis.zRem(communityIndex, [postId])
