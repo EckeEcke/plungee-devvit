@@ -36,41 +36,7 @@ export interface Theme {
   eyeWhite: string
   pupil: string
   /** line: Rahmen auf Panels und Hintergründen. Im dunklen Theme ist --outline fast so dunkel wie das Panel, dort braucht es eine helle Linie. */
-  ui: { panel: string; text: string; accent: string; highlight: string; muted: string; line: string }
-}
-
-/** Memphis, hell: Creme-Hintergrund, Primärfarben-Konfetti (80er) */
-export const MEMPHIS_LIGHT: Theme = {
-  id: 'memphis-light',
-  name: 'Memphis hell',
-  bgTop: '#FFF4E0',
-  bgBottom: '#FFE4F0',
-  surround: '#1E1647',
-  frame: '#FFD23F',
-  decor: ['#3A86FF', '#FFD23F', '#FF5FA2', '#1FD1C5'],
-  decorAlpha: 0.32,
-  decorShadow: '#1E1647',
-  decorShadowAlpha: 0.6,
-  solid: '#3A2E7A',
-  solidTop: '#6C5CE7',
-  solidShade: '#2A2060',
-  ice: '#5BC8EC',
-  iceTop: '#D8F6FF',
-  iceShade: '#2E96BD',
-  brittle: '#B8693A',
-  brittleTop: '#E8A46A',
-  brittleShade: '#7C4222',
-  danger: '#FF3B30',
-  dangerDark: '#B3160F',
-  help: '#1FD1C5',
-  help2: '#FFC400',
-  goal: '#FFB800',
-  player: '#FF5FA2',
-  playerShade: '#D93A82',
-  outline: '#1E1647',
-  eyeWhite: '#FFFFFF',
-  pupil: '#1E1647',
-  ui: { panel: 'rgba(58, 46, 122, 0.92)', text: '#FFF4E0', accent: '#FFD23F', highlight: '#B59AFB', muted: '#C9BFF5', line: '#1E1647' },
+  ui: { panel: string; text: string; accent: string; highlight: string; muted: string; line: string; success: string }
 }
 
 /** Memphis, dunkel: Türkis, Magenta, Gelb auf Nachtblau (90er) */
@@ -104,11 +70,6 @@ export const MEMPHIS_DARK: Theme = {
   outline: '#0B0620',
   eyeWhite: '#FFFFFF',
   pupil: '#0B0620',
-  ui: { panel: 'rgba(8, 4, 28, 0.82)', text: '#FFFFFF', accent: '#FFE14D', highlight: '#9B7DEA', muted: '#B9A8F0', line: 'rgba(185, 168, 240, 0.55)' },
+  ui: { panel: 'rgba(8, 4, 28, 0.82)', text: '#FFFFFF', accent: '#FFE14D', highlight: '#9B7DEA', muted: '#B9A8F0', line: 'rgba(185, 168, 240, 0.55)', success: '#2ECC71' },
 }
 
-export const THEMES: Theme[] = [MEMPHIS_LIGHT, MEMPHIS_DARK]
-
-export function themeById(id: string): Theme {
-  return THEMES.find((t) => t.id === id) ?? MEMPHIS_LIGHT
-}

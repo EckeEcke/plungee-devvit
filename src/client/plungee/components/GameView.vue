@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { audioSettings, startMusic, stopMusic, toggleAllSound } from '../audio/audio'
+import { audioSettings, playSfx, startMusic, stopMusic, toggleAllSound } from '../audio/audio'
 import SoundIcon from './SoundIcon.vue'
 import SkullIcon from './SkullIcon.vue'
 import MedalIcon from './MedalIcon.vue'
@@ -10,7 +10,7 @@ import { Game, type HudState } from '../game/game'
 import type { GhostSpec } from '../game/ghost'
 import type { Theme } from '../game/theme'
 import type { LeaderboardEntry } from '../../../shared/api'
-import { compileLevel, formatTicks, type LevelData } from '../sim'
+import { compileLevel, formatTicks, TICK_RATE, type LevelData } from '../sim'
 
 const props = withDefaults(
   defineProps<{
@@ -32,6 +32,7 @@ const props = withDefaults(
     leaderboardEntries?: LeaderboardEntry[]
     challengeClosed?: boolean
     allowBuild?: boolean
+    canPublishLevel?: boolean
     canPostResult?: boolean
     brag?: boolean
     targetTicks?: number | null
@@ -49,6 +50,7 @@ const emit = defineEmits<{
   watchReplay: []
   buildLevel: []
   postResult: []
+  publishLevel: []
 }>()
 
 const column = ref<HTMLElement | null>(null)
@@ -73,6 +75,8 @@ const cssVars = computed(() => ({
   '--panel': props.theme.ui.panel,
   '--text': props.theme.ui.text,
   '--accent': props.theme.ui.accent,
+  '--success': props.theme.ui.success,
+  '--danger': props.theme.danger,
   '--highlight': props.theme.ui.highlight,
   '--muted': props.theme.ui.muted,
   '--player': props.theme.player,
@@ -85,10 +89,19 @@ const cssVars = computed(() => ({
 }))
 
 const timeText = computed(() => formatTicks(hud.value.ticks))
+const timeDifference = computed(() => {
+  if (props.targetTicks == null) return null
+  const ticks = hud.value.ticks - props.targetTicks
+  return { ticks, text: `${ticks < 0 ? '−' : ticks > 0 ? '+' : ''}${(Math.abs(ticks) / TICK_RATE).toFixed(2)} s` }
+})
 const campaignMedal = computed(() => props.showCampaignMedal && hud.value.status === 'finished'
   ? medalFor(hud.value.ticks, hud.value.deaths, props.par) : null)
 const medalLabels = { gold: 'Gold', silver: 'Silver', bronze: 'Bronze' } as const
-const showNewBest = ref(false)
+const showNewBest = computed(() => props.showCampaignMedal === true && hud.value.newBest)
+const challengeReady = computed(() => props.verification.startsWith('Verified'))
+const challengePending = computed(() => !props.verification || props.verification.startsWith('Verifying'))
+let feedbackTimer = 0
+let feedbackPlayed = false
 const targets = ref({ gold: 0, silver: 0 })
 /** Local best time on this device; server verification is shown separately. */
 // Steuerung nur im ersten Level der Sitzung zeigen
@@ -124,6 +137,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  window.clearTimeout(feedbackTimer)
   insetObs?.disconnect()
   insetObs = null
   stopMusic()
@@ -143,6 +157,27 @@ watch(
       emit('finished', { ticks: hud.value.ticks, deaths: hud.value.deaths, replay: hud.value.replay })
     }
   },
+)
+
+// Feedback belongs to the visible achievement, never to a hidden local post best.
+watch(
+  () => [hud.value.status, showNewBest.value, props.brag && props.canPostResult && challengeReady.value] as const,
+  ([status, campaignBest, bragReady]) => {
+    if (status !== 'finished') {
+      window.clearTimeout(feedbackTimer)
+      feedbackPlayed = false
+      return
+    }
+    if (feedbackPlayed) return
+    if (campaignBest) {
+      feedbackPlayed = true
+      feedbackTimer = window.setTimeout(() => playSfx('newBest'), 700)
+    } else if (bragReady) {
+      feedbackPlayed = true
+      playSfx('newBest')
+    }
+  },
+  { flush: 'post' },
 )
 
 function restart(): void {
@@ -240,14 +275,18 @@ async function shareChallenge(): Promise<void> {
             <span>Gold with no deaths ≤ {{ formatTicks(targets.gold) }}</span>
             <span>Silver ≤ {{ formatTicks(targets.silver) }}</span>
           </div>
-          <div class="result-deaths" :aria-label="`${hud.deaths} deaths`">
+          <div class="result-deaths">
             <span class="death-label" aria-label="Deaths"><SkullIcon :size="17" /></span><b>{{ hud.deaths }}</b>
+            <template v-if="timeDifference">
+              <span class="result-separator" aria-hidden="true">|</span>
+              <span class="time-difference" :class="{ faster: timeDifference.ticks < 0, slower: timeDifference.ticks > 0 }">{{ timeDifference.text }}</span>
+            </template>
           </div>
           <div v-if="campaignMedal" class="medal">
             <MedalIcon :medal="campaignMedal" :size="34" />
             <b>{{ medalLabels[campaignMedal] }}</b>
           </div>
-          <div v-if="false" class="badges">
+          <div v-if="showNewBest" class="badges">
             <div v-if="showNewBest" class="badge">
               <i v-for="n in 8" :key="n" class="spark" :style="{ '--a': n * 45 + 'deg' }" aria-hidden="true" />
               <span class="badge-text">★ New best!</span>
@@ -261,14 +300,22 @@ async function shareChallenge(): Promise<void> {
               <span class="leaderboard-stats"><span>{{ formatTicks(entry.ticks) }}</span><span aria-hidden="true">·</span><span class="leaderboard-deaths" :aria-label="`${entry.deaths} deaths`"><SkullIcon :size="15" />{{ entry.deaths }}</span></span>
             </div>
           </div>
-          <button
-            v-if="allowChallenge && verification.startsWith('Verified')"
-            class="ghost challenge"
-            type="button"
-            @click="emit('createChallenge')"
-          >Create challenge post</button>
+          <div v-if="allowChallenge" class="challenge-action-slot" :aria-busy="challengePending">
+            <button
+              class="ghost challenge"
+              :class="{ 'pending-action': !challengeReady }"
+              :disabled="!challengeReady || challengeStatus === 'Creating challenge…'"
+              type="button"
+              @click="emit('createChallenge')"
+            >Create challenge post</button>
+            <div v-if="!challengeReady" class="challenge-action-state" role="status">
+              <template v-if="challengePending"><span class="verification-spinner" aria-hidden="true" /><span>Checking run…</span></template>
+              <span v-else>{{ verification }}</span>
+            </div>
+          </div>
           <button v-if="replayAvailable" class="ghost replay-action" type="button" @click="emit('watchReplay')">Watch top-5 replay</button>
-          <button v-if="canPostResult" :class="brag ? 'ghost challenge' : 'ghost replay-action'" type="button" :disabled="Boolean(resultCommentStatus)" @click="emit('postResult')">{{ brag ? 'Brag' : 'Post my result' }}</button>
+          <button v-if="canPublishLevel" class="ghost challenge" type="button" @click="emit('publishLevel')">Publish level</button>
+          <button v-if="canPostResult" :class="brag ? 'ghost challenge brag-pop' : 'ghost replay-action'" type="button" :disabled="Boolean(resultCommentStatus)" @click="emit('postResult')">{{ brag ? 'Brag' : 'Post my result' }}</button>
           <p v-if="resultCommentStatus" role="status">{{ resultCommentStatus }}</p>
           <div v-if="challengeStatus" class="challenge-feedback" role="status">
             <b>{{ challengeStatus }}</b>
@@ -277,7 +324,7 @@ async function shareChallenge(): Promise<void> {
             <span v-if="shareStatus" role="status">{{ shareStatus }}</span>
           </div>
           <div class="actions">
-            <button :class="(allowChallenge && verification.startsWith('Verified')) || (brag && canPostResult) ? 'ghost' : 'cta'" type="button" @click="restart">{{ challengeClosed ? 'Practice' : 'Improve' }}</button>
+            <button :class="allowChallenge || canPublishLevel || (brag && canPostResult) ? 'ghost' : 'cta'" type="button" @click="restart">{{ challengeClosed ? 'Practice' : 'Improve' }}</button>
             <button v-if="!hasNext" class="ghost" type="button" @click="emit('exit')">{{ exitText }}</button>
           </div>
           <button v-if="hasNext" class="ghost next" type="button" @click="emit('next')">{{ nextText }}</button>
@@ -555,6 +602,10 @@ async function shareChallenge(): Promise<void> {
 .target-time { flex: 0 0 100%; text-align: center; color: var(--text); font-size: 14px; font-weight: 800; }
 .target-time b { color: var(--accent); font-variant-numeric: tabular-nums; }
 .result-target { margin: 0 0 4px; color: var(--muted); font-size: 14px; font-weight: 800; }
+.result-separator { margin-inline: 6px; color: var(--muted); }
+.time-difference { color: var(--muted); font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.time-difference.faster { color: var(--success); }
+.time-difference.slower { color: var(--danger); }
 .death-label :deep(svg), .pill.deaths :deep(svg) { display: block; flex: none; }
 .leaderboard-stats, .leaderboard-deaths { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
 .leaderboard-deaths :deep(svg) { display: block; flex: none; }
@@ -650,6 +701,14 @@ async function shareChallenge(): Promise<void> {
   transform: translate(3px, 3px);
   box-shadow: 1px 1px 0 var(--outline);
 }
+.challenge-action-slot { position: relative; display: grid; margin-top: 24px; }
+.challenge-action-slot .challenge { margin-top: 0; }
+.pending-action { visibility: hidden; }
+.challenge-action-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: 14px; font-weight: 800; }
+.verification-spinner { width: 22px; height: 22px; flex: none; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: verification-spin 0.8s linear infinite; }
+@keyframes verification-spin { to { transform: rotate(360deg); } }
+.brag-pop { animation: brag-pop 0.45s cubic-bezier(0.2, 1.3, 0.4, 1) both; }
+@keyframes brag-pop { from { transform: scale(0.8); opacity: 0; } 65% { transform: scale(1.05); opacity: 1; } to { transform: scale(1); opacity: 1; } }
 
 .replay-action {
   width: 100%;
@@ -972,6 +1031,7 @@ async function shareChallenge(): Promise<void> {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .brag-pop, .verification-spinner { animation: none; }
   .fadeout-leave-active,
   .result-leave-active {
     transition: none;

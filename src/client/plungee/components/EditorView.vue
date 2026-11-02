@@ -96,6 +96,7 @@ const ctrl = shallowRef<EditorController | null>(null)
 const tool = ref<ToolId>('tile')
 const mode = ref<'edit' | 'test'>('edit')
 const menuOpen = ref(false)
+const publishOnly = ref(false)
 const errorsOpen = ref(false)
 const toast = ref('')
 const testData = shallowRef<LevelData | null>(null)
@@ -250,7 +251,7 @@ function apply(patch: Record<string, unknown>): void {
 }
 
 function onTitle(e: Event): void {
-  doc.title = (e.target as HTMLInputElement).value.slice(0, 40)
+  doc.title = (e.target as HTMLInputElement).value.slice(0, 32)
   bump()
 }
 
@@ -272,6 +273,13 @@ function leaveTest(): void {
   mode.value = 'edit'
   testData.value = null
   if (ctrl.value) ctrl.value.paused = false
+}
+
+function openPublishMask(): void {
+  if (!verified.value) return
+  leaveTest()
+  publishOnly.value = true
+  menuOpen.value = true
 }
 
 function onFinished(res: { ticks: number; deaths: number; replay: string }): void {
@@ -451,7 +459,7 @@ onBeforeUnmount(() => {
   <div class="ed" :style="cssVars">
     <div class="column">
       <header class="top">
-        <button class="ib" type="button" aria-label="Menu" @click="menuOpen = true">☰</button>
+        <button class="ib" type="button" aria-label="Menu" @click="publishOnly = false; menuOpen = true">☰</button>
         <div class="title">
           <b>{{ titleText }}</b>
           <button class="status" :class="statusClass" type="button" @click="errorsOpen = !errorsOpen">
@@ -819,18 +827,18 @@ onBeforeUnmount(() => {
     <!-- Menu -->
     <Transition name="modal">
     <div v-if="menuOpen" class="modal" @click.self="menuOpen = false">
-      <div class="card">
+      <form class="card" @submit.prevent="upload">
         <div class="card-head">
-          <h2>Level</h2>
+          <h2>{{ publishOnly ? 'Publish level' : 'Level' }}</h2>
           <button class="ib" type="button" aria-label="Close" @click="menuOpen = false">✕</button>
         </div>
 
         <label class="field">
-          <span>Title</span>
-          <input type="text" maxlength="40" placeholder="Untitled" :value="doc.title" @input="onTitle" />
+          <span>Level name *</span>
+          <input type="text" required minlength="3" maxlength="32" placeholder="Enter level name" :value="doc.title" @input="onTitle" />
         </label>
 
-        <section>
+        <section v-if="!publishOnly">
           <h3>Size</h3>
           <div class="seg wide">
             <button
@@ -845,7 +853,7 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section>
+        <section v-if="!publishOnly">
           <h3>Start new</h3>
           <div class="seg wide">
             <button v-for="(rows, size) in LEVEL_ROWS" :key="size" type="button" @click="newLevel(size)">
@@ -870,7 +878,7 @@ onBeforeUnmount(() => {
           </p>
           <p v-if="verified && titleBad" class="note">{{ titleBad }}</p>
           <p v-else-if="verified && !titleOk" class="note">Give your level a name of 3–32 characters first (field at the top of this menu).</p>
-          <button class="cta" type="button" :disabled="!canUpload" @click="upload">
+          <button class="cta" type="submit" :disabled="!canUpload">
             {{ uploading ? 'Uploading …' : alreadyUploaded ? '✓ Uploaded' : 'Publish Reddit post' }}
           </button>
           <template v-if="DEV">
@@ -882,8 +890,9 @@ onBeforeUnmount(() => {
           </template>
         </section>
 
-        <button class="ghost" type="button" @click="emit('exit')">Back to main menu</button>
-      </div>
+        <button v-if="publishOnly" class="ghost" type="button" @click="menuOpen = false">Back to editor</button>
+        <button v-else class="ghost" type="button" @click="emit('exit')">Back to main menu</button>
+      </form>
     </div>
     </Transition>
 
@@ -897,6 +906,8 @@ onBeforeUnmount(() => {
       exit-text="Back to editor"
       @exit="leaveTest"
       @finished="onFinished"
+      :can-publish-level="verified"
+      @publish-level="openPublishMask"
     />
 
     <Transition name="toast">

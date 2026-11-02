@@ -64,7 +64,7 @@ export class EditorDoc {
   }
 
   /** Neues Level mit Boden, Startplattform und Ziel. */
-  static createStarter(size: LevelSize, title = 'New level'): EditorDoc {
+  static createStarter(size: LevelSize, title = ''): EditorDoc {
     const rows = LEVEL_ROWS[size]
     const doc = new EditorDoc()
     doc.size = size

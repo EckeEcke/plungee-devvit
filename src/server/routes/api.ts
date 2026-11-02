@@ -3,10 +3,11 @@ import { context, redis, reddit } from '@devvit/web/server'
 import type { ChallengeProfile, ChallengeVersusResponse } from '../../shared/api'
 import { LEVELS } from '../../client/plungee/levels'
 import { compileLevel, decodeInputs, simulate, TICK_RATE } from '../../client/plungee/sim'
-import { bragText, isWinningRun } from '../core/brag'
+import { bragText, deathText, isWinningRun } from '../core/brag'
 import type { ApiError, LeaderboardResponse, PostInitResponse, VerifyRunResponse } from '../../shared/api'
 import { createChallengePost } from '../core/post'
 import { getPersonalBest, getReleasedLeaderboard, recordVerifiedScore } from '../core/scores'
+import { isCommunityBlocked } from '../core/moderation'
 
 export const api = new Hono()
 api.use('*', async (c, next) => {
@@ -17,9 +18,11 @@ api.use('*', async (c, next) => {
 /** A requested post is a resource selector, never an identity or trusted level definition. */
 async function resolvePlayPost(requested?: string) {
   if (!requested || requested === context.postId) {
+    if (context.postId && (context.postData as Record<string, unknown> | undefined)?.kind === 'community' && await isCommunityBlocked(context.postId)) throw new Error('Community level unpublished.')
     return { postId: context.postId, raw: context.postData as Record<string, unknown> | undefined }
   }
   if (!/^t3_[a-z0-9]+$/.test(requested)) throw new Error('Invalid community post.')
+  if (await isCommunityBlocked(requested)) throw new Error('Community level unpublished.')
   const meta = await redis.get(`plungee:v1:post:${requested}:meta`)
   const level = await redis.get(`plungee:v1:post:${requested}:level`)
   if (!meta || !level) throw new Error('Community level unavailable.')
@@ -56,6 +59,7 @@ api.get('/challenge-versus', async c => {
 async function postLevel(raw = context.postData as Record<string, unknown> | undefined, postId = context.postId) {
   const levelKey = typeof raw?.levelKey === 'string' ? raw.levelKey : ''
   if (raw?.kind === 'community' && postId) {
+    if (await isCommunityBlocked(postId)) return null
     const stored = await redis.get(`plungee:v1:post:${postId}:level`)
     if (!stored) return null
     const data = JSON.parse(stored)
@@ -175,7 +179,7 @@ api.post('/result-comment', async c => {
     if (await redis.hGet(key, postId)) return c.json({ posted: true })
     const { formatTicks } = await import('../../client/plungee/sim')
     const text = raw?.kind === 'community'
-      ? `I finished this Plungee level! My verified time: ${formatTicks(best.ticks)} · ${best.deaths} deaths.`
+      ? `I finished this Plungee level! My verified time: ${formatTicks(best.ticks)} · ${deathText(best.deaths)}.`
       : bragText(best.ticks, Number(raw?.creatorBestTicks), best.deaths, TICK_RATE)
     const comment = await reddit.submitComment({ id: postId, runAs: 'USER', text })
     await redis.hSet(key, { [postId]: comment.id })

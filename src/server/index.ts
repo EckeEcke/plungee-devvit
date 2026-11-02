@@ -7,6 +7,7 @@ import { triggers } from './routes/triggers'
 import { scheduler } from './routes/scheduler'
 import { community } from './routes/community'
 import { data } from './routes/data'
+import { moderation } from './routes/moderation'
 
 const app = new Hono()
 const internal = new Hono()
@@ -16,5 +17,6 @@ internal.route('/scheduler', scheduler)
 app.route('/api', api)
 app.route('/api', community)
 app.route('/api', data)
+app.route('/api/moderation', moderation)
 app.route('/internal', internal)
 serve({ fetch: app.fetch, createServer, port: getServerPort() })

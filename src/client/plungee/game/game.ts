@@ -74,7 +74,6 @@ export class Game {
   private newBest = false
   private replay = ''
   private resizeObs: ResizeObserver | null = null
-  private bestTimer = 0
   private lastCountdown = 0
   private laserPrev: LaserPhase[] = []
   /** Letzte Halbperiode des Blinktakts (wechselt alle BLINK_HALF Ticks) */
@@ -178,7 +177,6 @@ export class Game {
   restart(): void {
     this.world = new World(this.level)
     for (const g of [this.selfGhost, ...this.otherGhosts]) g?.reset()
-    window.clearTimeout(this.bestTimer)
     stopAllLoops()
     this.lastCountdown = 0
     this.laserPrev = this.level.lasers.map((l) => laserPhase(l, 0))
@@ -222,7 +220,6 @@ export class Game {
 
   dispose(): void {
     this.disposed = true
-    window.clearTimeout(this.bestTimer)
     stopAllLoops()
     cancelAnimationFrame(this.raf)
     this.raf = 0
@@ -310,7 +307,6 @@ export class Game {
     stopAllLoops()
     playSfx('finish')
     duckMusic(2200)
-    if (this.newBest) this.bestTimer = window.setTimeout(() => playSfx('newBest'), 700)
     this.emitHud()
   }
 

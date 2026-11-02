@@ -1,6 +1,7 @@
 import { context, redis, reddit } from '@devvit/web/server'
 import type { CommunityLevelMeta } from '../../shared/api'
 import type { LevelData } from '../../client/plungee/sim'
+import { isCommunityBlocked } from './moderation'
 
 /** Resumable backfill of already-published levels, independent of the author's visits. */
 export async function indexCommunityBatch(): Promise<void> {
@@ -10,7 +11,8 @@ export async function indexCommunityBatch(): Promise<void> {
   if (cursor === 'done') return
   const posts = await reddit.getNewPosts({ subredditName: context.subredditName, limit: 25, ...(cursor ? { after: cursor } : {}) }).all()
   for (const post of posts) {
-    if (!post.title.startsWith('Plungee Community Level')) continue
+    if (await isCommunityBlocked(post.id)) continue
+    if (!post.title.startsWith('Plungee Community Level') && !post.title.startsWith('I built this level. Can you beat my time?')) continue
     const raw = await post.getPostData()
     if (raw?.kind !== 'community' || typeof raw.creatorUserId !== 'string') continue
     const key = `plungee:v1:post:${post.id}:level`

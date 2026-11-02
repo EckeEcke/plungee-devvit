@@ -3,13 +3,14 @@ import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 
 import GameView from './plungee/components/GameView.vue'
 const RaceView = defineAsyncComponent(() => import('./plungee/components/RaceView.vue'))
 const EditorView = defineAsyncComponent(() => import('./plungee/components/EditorView.vue'))
+const ModerationView = defineAsyncComponent(() => import('./plungee/components/ModerationView.vue'))
 import CommunityView from './plungee/components/CommunityView.vue'
 import { prepareDraft } from './plungee/editor/storage'
 import CampaignView from './plungee/components/CampaignView.vue'
 import CharacterView from './plungee/components/CharacterView.vue'
 import CharacterCanvas from './plungee/components/CharacterCanvas.vue'
 import { applyLook, DEFAULT_LOOK, look, sanitizeLook } from './plungee/game/look'
-import { themeById } from './plungee/game/theme'
+import { MEMPHIS_DARK } from './plungee/game/theme'
 import { DIFFICULTIES, LEVELS, LEVELS_BY_DIFFICULTY, type Difficulty, type LevelEntry } from './plungee/levels'
 import type { ProgressMap } from './plungee/game/progress'
 import { loadProgress, recordResult } from './plungee/game/progress'
@@ -17,8 +18,13 @@ import { formatTicks } from './plungee/sim'
 import type { LeaderboardResponse, PostInitResponse, VerifyRunResponse } from '../shared/api'
 import type { GhostSpec } from './plungee/game/ghost'
 
-type Screen = 'loading' | 'postPlay' | 'replay' | 'campaign' | 'campaignPlay' | 'character' | 'menu' | 'error' | 'editor' | 'community'
+type Screen = 'loading' | 'postPlay' | 'replay' | 'campaign' | 'campaignPlay' | 'character' | 'menu' | 'error' | 'editor' | 'community' | 'moderation'
 const screen = ref<Screen>('loading')
+const moderationAllowed = ref(false)
+onMounted(async () => {
+  try { moderationAllowed.value = (await fetch('/api/moderation/access')).ok }
+  catch { moderationAllowed.value = false }
+})
 const notice = ref('')
 const settingsOpen = ref(false)
 const confirmDelete = ref(false)
@@ -28,7 +34,6 @@ const resultRunId = ref('')
 const resultCommentStatus = ref('')
 const postLevel = ref<LevelEntry | null>(null)
 const activePostId = ref('')
-const fromCommunity = ref(false)
 function postApi(path: string): string {
   return activePostId.value ? `${path}?postId=${encodeURIComponent(activePostId.value)}` : path
 }
@@ -39,23 +44,8 @@ const postClosed = ref(false)
 const targetTicks = ref<number | null>(null)
 const releasedLeaderboard = ref<LeaderboardResponse | null>(null)
 
-function initialDark(): boolean {
-  try {
-    const saved = localStorage.getItem('plunge:theme')
-    if (saved === 'memphis-dark') return true
-    if (saved === 'memphis-light') return false
-  } catch { /* optional preference */ }
-  try { return window.matchMedia('(prefers-color-scheme: dark)').matches }
-  catch { return false }
-}
-const dark = ref(initialDark())
-const themeId = computed(() => dark.value ? 'memphis-dark' : 'memphis-light')
-const baseTheme = computed(() => themeById(themeId.value))
-const theme = computed(() => applyLook(baseTheme.value, look))
-watch(themeId, id => {
-  try { localStorage.setItem('plunge:theme', id) }
-  catch { /* optional preference */ }
-})
+const baseTheme = MEMPHIS_DARK
+const theme = computed(() => applyLook(baseTheme, look))
 function loadDifficulty(): Difficulty {
   try {
     const saved = localStorage.getItem('plunge:difficulty')
@@ -140,7 +130,7 @@ function startLevel(index: number): void {
   screen.value = 'campaignPlay'
 }
 function continueCampaign(): void {
-  if (fromCommunity.value) { screen.value = 'community'; return }
+  if (postKind.value === 'community') { screen.value = 'menu'; return }
   if (postLevel.value) difficulty.value = postLevel.value.difficulty
   screen.value = 'campaign'
 }
@@ -164,7 +154,6 @@ async function playCommunityPost(id: string): Promise<void> {
     if (data.kind !== 'community' || !data.levelData) throw new Error('Community level unavailable.')
     postLevel.value = { key: data.levelKey, title: data.title, data: data.levelData as LevelEntry['data'], difficulty: 'normal', par: null }
     activePostId.value = data.postId
-    fromCommunity.value = true
     postKind.value = 'community'
     targetTicks.value = null
     postClosesAt.value = data.closesAt ?? null
@@ -319,7 +308,7 @@ const cssVars = computed(() => ({
   '--c3': theme.value.decor[3],
   '--decor-shadow': `color-mix(in srgb, ${theme.value.decorShadow} ${Math.round(theme.value.decorShadowAlpha * 100)}%, ${theme.value.bgTop})`,
 }))
-const menuText = computed(() => theme.value.id === 'memphis-dark' ? '#FFFFFF' : theme.value.solid)
+const menuText = computed(() => theme.value.ui.text)
 </script>
 
 <template>
@@ -332,7 +321,7 @@ const menuText = computed(() => theme.value.id === 'memphis-dark' ? '#FFFFFF' : 
       :theme="theme"
       :par="postLevel.par"
       :has-next="true"
-      :next-text="fromCommunity ? 'Community levels' : 'Continue in Campaign ▶'"
+      :next-text="postKind === 'community' ? 'Main menu' : 'Continue in Campaign ▶'"
       :verification="verification"
       :can-post-result="canPostResult"
       :result-comment-status="resultCommentStatus"
@@ -400,6 +389,7 @@ const menuText = computed(() => theme.value.id === 'memphis-dark' ? '#FFFFFF' : 
       @exit="screen = 'menu'"
       @play="startLevel"
     />
+    <ModerationView v-else-if="screen === 'moderation'" :theme="theme" @exit="screen = 'menu'" />
     <CommunityView v-else-if="screen === 'community'" :theme="theme" @exit="screen = 'menu'" @play="playCommunityPost" />
     <EditorView v-else-if="screen === 'editor'" :theme="theme" @exit="screen = 'menu'" />
     <CharacterView
@@ -441,6 +431,7 @@ const menuText = computed(() => theme.value.id === 'memphis-dark' ? '#FFFFFF' : 
       <p v-else-if="screen === 'error'" class="status" role="alert">{{ notice }}</p>
       <p v-if="screen === 'menu' && notice" class="status" role="alert">{{ notice }}</p>
       <a v-if="screen === 'menu'" class="data-link" href="#delete-data" @click.prevent="settingsOpen = true">Delete saved data</a>
+      <a v-if="screen === 'menu' && moderationAllowed" class="data-link" href="#moderation" @click.prevent="screen = 'moderation'">Moderate levels</a>
       <section v-if="screen === 'menu' && settingsOpen" id="delete-data" class="data-settings">
         <h2>Delete my saved data</h2>
         <p>Deletes your scores, replays, saved character snapshots, editor draft and published level data from Plungee. Your community levels will stop being playable. Reddit posts and comments remain.</p>

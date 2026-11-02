@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
 import { context, redis, reddit } from '@devvit/web/server'
-import { compileLevel, decodeInputs, simulate, validateLevel, LEVEL_ROWS, LEVEL_COLS, type LevelData } from '../../client/plungee/sim'
+import { compileLevel, decodeInputs, simulate, validateLevel, LEVEL_ROWS, LEVEL_COLS, TICK_RATE, type LevelData } from '../../client/plungee/sim'
 import { levelHash } from '../../client/plungee/editor/hash'
 import type { CommunityLevelMeta } from '../../shared/api'
 import { indexCommunityBatch } from '../core/catalog'
+import { isCommunityBlocked } from '../core/moderation'
 
 export const community = new Hono()
 const TTL = 90 * 86400
@@ -17,6 +18,7 @@ community.get('/community', async c => {
   if (context.userId) {
     const own = await redis.hGetAll(`plungee:v1:user:${context.userId}:levels`)
     for (const postId of Object.keys(own)) {
+      if (await isCommunityBlocked(postId)) continue
       if (await redis.get(metaKey(postId))) continue
       const stored = await redis.get(`plungee:v1:post:${postId}:level`)
       if (!stored) continue
@@ -36,6 +38,7 @@ community.get('/community', async c => {
   const members = await redis.zRange(communityIndex, 0, -1)
   const levels: CommunityLevelMeta[] = []
   for (const entry of members.reverse()) {
+    if (await isCommunityBlocked(entry.member)) continue
     const [meta, level] = await Promise.all([
       redis.get(metaKey(entry.member)), redis.get(`plungee:v1:post:${entry.member}:level`),
     ])
@@ -83,15 +86,20 @@ community.post('/community', async c => {
     if (validateLevel(value.level).length) throw new Error('Invalid level.')
     const result = simulate(compileLevel(value.level), decodeInputs(value.replay))
     if (!result.finished) throw new Error('Complete your level before publishing.')
+    const time = (Math.floor(result.ticks * 100 / TICK_RATE) / 100).toFixed(2)
+    const deaths = result.deaths === 0 ? 'without dying' : `with ${result.deaths} ${result.deaths === 1 ? 'death' : 'deaths'}`
+    const postText = `I made this Plungee level and finished it in ${time} s ${deaths}. Think you can do better? Give it a try!`
     const levelKey = `community:${levelHash(value.level)}`
     const closesAt = Date.now() + 7 * 86400000
     const post = await reddit.submitCustomPost({
       subredditName: context.subredditName, entry: 'default', runAs: 'USER',
-      title: `Plungee Community Level · ${value.title.trim()}`,
-      userGeneratedContent: { text: value.title.trim() },
-      textFallback: { text: `Play my Plungee level: ${value.title.trim()}` },
+      title: `I built this level. Can you beat my time? · ${value.title.trim()}`,
+      userGeneratedContent: { text: postText },
+      textFallback: { text: postText },
       postData: { kind: 'community', levelKey, closesAt, creatorUserId: String(context.userId) },
     })
+    // The creator test proves solvability and supplies the post copy only.
+    // Do not record a score here; regular play uses /api/verify for every user.
     const key = `plungee:v1:post:${post.id}:level`
     await redis.set(key, JSON.stringify(value.level))
     const userKey = `plungee:v2:user:${context.userId}:levels`

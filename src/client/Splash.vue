@@ -3,26 +3,16 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { requestExpandedMode } from '@devvit/web/client'
 import CharacterCanvas from './plungee/components/CharacterCanvas.vue'
 import { look, applyLook } from './plungee/game/look'
-import { themeById } from './plungee/game/theme'
+import { MEMPHIS_DARK } from './plungee/game/theme'
 import { LEVELS, type LevelEntry } from './plungee/levels'
 import type { PostInitResponse } from '../shared/api'
 import type { ChallengeVersusResponse } from '../shared/api'
-import { formatTicks } from './plungee/sim'
+import { compileLevel, formatTicks, LEVEL_WIDTH, TILE, World } from './plungee/sim'
+import { selectPreviewStart } from './plungee/game/previewWindow'
 
-const PREVIEW_ROWS = 16
+const PREVIEW_ROWS = 20
 
-function darkMode(): boolean {
-  try {
-    const saved = localStorage.getItem('plunge:theme')
-    if (saved === 'memphis-dark') return true
-    if (saved === 'memphis-light') return false
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  } catch {
-    return false
-  }
-}
-
-const theme = themeById(darkMode() ? 'memphis-dark' : 'memphis-light')
+const theme = MEMPHIS_DARK
 const colors = computed(() => applyLook(theme, look))
 
 const vars = {
@@ -38,7 +28,7 @@ const vars = {
   '--c1': theme.decor[1],
   '--c2': theme.decor[2],
   '--c3': theme.decor[3],
-  '--creator-ring': theme.id === 'memphis-dark' ? theme.decor[0] : theme.decor[3],
+  '--creator-ring': theme.decor[0],
   '--decor-shadow': `color-mix(in srgb, ${theme.decorShadow} ${Math.round(theme.decorShadowAlpha * 100)}%, ${theme.bgTop})`,
 }
 
@@ -75,78 +65,32 @@ const weeklyTimeLeft = computed(() => {
 })
 onBeforeUnmount(() => { if (countdownInterval !== undefined) clearInterval(countdownInterval) })
 
-/** Vorschau direkt aus den echten Leveldaten. */
-function drawPreview(): void {
+/** Render a static, representative snapshot with the actual game renderer. */
+async function drawPreview(): Promise<void> {
   const c = canvas.value
   const data = level.value?.data
-  const ctx = c?.getContext('2d')
-  if (!c || !ctx || !data) return
-
-  const tile = 14
-  c.width = 16 * tile
-  c.height = PREVIEW_ROWS * tile
-  ctx.clearRect(0, 0, c.width, c.height)
-  ctx.fillStyle = theme.bgTop
-  ctx.fillRect(0, 0, c.width, c.height)
-
-  for (let y = 0; y < PREVIEW_ROWS; y++) {
-    const line = data.tiles[y] ?? ''
-    for (let x = 0; x < 16; x++) {
-      if (line[x] !== '#') continue
-
-      ctx.fillStyle = theme.solid
-      ctx.fillRect(x * tile, y * tile, tile, tile)
-
-      if (y === 0 || data.tiles[y - 1]?.[x] !== '#') {
-        ctx.fillStyle = theme.solidTop
-        ctx.fillRect(x * tile, y * tile, tile, 4)
-      }
-
-      ctx.fillStyle = theme.solidShade
-      ctx.fillRect(x * tile + tile - 3, y * tile + 4, 3, tile - 4)
-    }
-  }
-
-  for (const entity of data.entities) {
-    if (entity.y >= PREVIEW_ROWS) continue
-    const px = entity.x * tile
-    const py = entity.y * tile
-
-    if (entity.t === 'spikes') {
-      ctx.fillStyle = theme.danger
-      ctx.beginPath()
-      if (entity.dir === 'u') {
-        ctx.moveTo(px + 1, py + tile)
-        ctx.lineTo(px + tile / 2, py + 3)
-        ctx.lineTo(px + tile - 1, py + tile)
-      } else if (entity.dir === 'd') {
-        ctx.moveTo(px + 1, py)
-        ctx.lineTo(px + tile / 2, py + tile - 3)
-        ctx.lineTo(px + tile - 1, py)
-      } else if (entity.dir === 'l') {
-        ctx.moveTo(px + tile, py + 1)
-        ctx.lineTo(px + 3, py + tile / 2)
-        ctx.lineTo(px + tile, py + tile - 1)
-      } else {
-        ctx.moveTo(px, py + 1)
-        ctx.lineTo(px + tile - 3, py + tile / 2)
-        ctx.lineTo(px, py + tile - 1)
-      }
-      ctx.closePath()
-      ctx.fill()
-    } else if (entity.t === 'spring') {
-      ctx.fillStyle = theme.help
-      ctx.fillRect(px + 2, py + tile - 6, tile - 4, 5)
-    } else if (entity.t === 'goal') {
-      ctx.fillStyle = theme.goal
-      ctx.fillRect(px + 3, py + 3, tile - 6, tile - 6)
-    }
-  }
+  if (!c || !data) return
+  const { Renderer } = await import('./plungee/game/renderer')
+  if (canvas.value !== c || level.value?.data !== data) return
+  const compiled = compileLevel(data)
+  const world = new World(compiled)
+  const renderer = new Renderer(c, theme)
+  renderer.hidePlayer = true
+  renderer.freeCamera = true
+  renderer.setLevel(compiled)
+  // Match the card's 4:5 crop without stretching the world's proportions.
+  renderer.resize(LEVEL_WIDTH, PREVIEW_ROWS * TILE, Math.min(window.devicePixelRatio || 1, 2))
+  c.style.removeProperty('width')
+  c.style.removeProperty('height')
+  renderer.camY = selectPreviewStart(data, PREVIEW_ROWS) * TILE
+  // A real simulation timestamp shows hazard phases without running the player.
+  world.tick = 60
+  renderer.draw(world, 0, false)
 }
 
 watch(level, async () => {
   await nextTick()
-  drawPreview()
+  await drawPreview()
 })
 
 onMounted(async () => {

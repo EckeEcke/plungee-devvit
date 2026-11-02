@@ -15,7 +15,7 @@ test('difference boundaries use exact simulation ticks', () => {
   assert.match(bragText(479, 600, 0, 60), /^Easy 😎, /)
 })
 test('comment uses the supplied run time and actual deaths', () => {
-  assert.equal(bragText(570, 600, 0, 60), 'Close, but I beat the level in 9.50 s! 0 deaths')
-  assert.equal(bragText(479, 600, 1, 60), 'Easy 😎, I beat the level in 7.98 s! 1 death')
+  assert.equal(bragText(570, 600, 0, 60), 'Close, but I beat the level in 9.50 s! without dying')
+  assert.equal(bragText(479, 600, 1, 60), 'Easy 😎, I beat the level in 7.98 s! only died once')
   assert.equal(bragText(3599, 3600, 2, 60), 'Photofinish! I beat the level in 59.98 s! 2 deaths')
 })

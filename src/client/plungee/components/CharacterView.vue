@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import PageShell from './PageShell.vue'
 import { computed } from 'vue'
-import { themeById, type Theme } from '../game/theme'
+import { MEMPHIS_DARK, type Theme } from '../game/theme'
 import { applyLook, COLORS, DEFAULT_LOOK, EYES, look, PATTERN_COLORS, PATTERNS, randomLook } from '../game/look'
 import CharacterCanvas from './CharacterCanvas.vue'
 
@@ -12,7 +12,7 @@ const emit = defineEmits<{ exit: [] }>()
  * props.theme enthält die gewählte Körperfarbe schon (App.vue wendet sie an). Die Farbfelder brauchen aber
  * das Theme ohne Auswahl, sonst zeigt „Pink“ immer die aktuell gewählte Farbe und setzt beim Klick auf Pink zurück.
  */
-const base = computed(() => themeById(props.theme.id))
+const base = computed(() => MEMPHIS_DARK)
 
 /** Vorschau: Basis-Theme mit der gewählten Farbe, genau wie im Spiel */
 const themed = computed(() => applyLook(base.value, look))
