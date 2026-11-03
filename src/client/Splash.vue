@@ -99,6 +99,10 @@ onMounted(async () => {
     if (!res.ok) throw new Error('Challenge unavailable')
 
     const data = await res.json() as PostInitResponse
+    if (data.kind === 'editor') {
+      postKind.value = 'editor'
+      return
+    }
     const entry = data.kind === 'community' && data.levelData
       ? { key: data.levelKey, title: data.title, data: data.levelData as LevelEntry['data'], difficulty: 'normal' as const, par: null }
       : LEVELS.find(l => l.key === data.levelKey)
@@ -137,6 +141,9 @@ function watchReplays(event: MouseEvent): void {
 function openMenu(event: MouseEvent): void {
   void requestExpandedMode(event, 'menu', { title: 'Plungee' })
 }
+function openEditor(event: MouseEvent): void {
+  void requestExpandedMode(event, 'editor', { title: 'Plungee — Build a level' })
+}
 </script>
 
 <template>
@@ -164,7 +171,19 @@ function openMenu(event: MouseEvent): void {
         </div>
       </div>
 
-      <template v-if="level">
+      <template v-if="postKind === 'editor'">
+        <button class="play" type="button" @click="openEditor">Build a level</button>
+        <div class="level-preview" aria-label="Build your own Plungee level">
+          <div class="level-overlay">
+            <CharacterCanvas class="preview-character" :colors="colors" :look="look" :size="72" />
+            <div class="overlay-copy">
+              <h2 class="level-name">Build a level</h2>
+              <p class="challenge-question">Create it. Play it.Share it.</p>
+            </div>
+          </div>
+        </div>
+      </template>
+      <template v-else-if="level">
         <button class="play" type="button" @click="play">
           ▶ {{ postKind === 'challenge' ? 'Accept challenge' : 'Play' }}
         </button>
@@ -199,7 +218,7 @@ function openMenu(event: MouseEvent): void {
             </div>
             <div class="overlay-copy">
               <p v-if="postKind === 'weekly'" class="weekly-label">Weekly Challenge</p>
-              <p class="challenge-question">{{ postKind === 'challenge' ? 'Can you beat my time?' : 'Set the fastest time!' }}</p>
+              <p class="challenge-question">{{ postKind === 'campaign' ? 'Play the Campaign' : postKind === 'challenge' ? 'Can you beat my time?' : 'Set the fastest time!' }}</p>
               <p v-if="postKind === 'challenge' && targetTicks !== null" class="challenge-target">{{ formatTicks(targetTicks) }}</p>
               <h2 class="level-name">{{ level.title }}</h2>
               <p v-if="postKind === 'weekly' && weeklyTimeLeft" class="weekly-countdown" role="timer">{{ weeklyTimeLeft }}</p>
@@ -214,7 +233,7 @@ function openMenu(event: MouseEvent): void {
         <button class="play" type="button" @click="play">▶ Play</button>
       </template>
 
-      <p class="controls">◀ ▶ to move · Gravity does the rest</p>
+      <p v-if="postKind !== 'editor'" class="controls">◀ ▶ to move · Gravity does the rest</p>
     </div>
   </main>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import {
   CRUSHER_REACHES,
   CRUSHER_SIZES,
@@ -58,6 +58,7 @@ const ENTITY_LABELS: Record<EntityData['t'], string> = {
   checkpoint: 'Checkpoint',
   spring: 'Spring',
   spikes: 'Spikes',
+  fallingSpike: 'Dropspike',
   laser: 'Laser',
   hammer: 'Hammer',
   saw: 'Saw',
@@ -70,7 +71,8 @@ const TOOL_HINTS: Record<ToolId, string> = {
   erase: 'Drag to erase blocks and objects.',
   spring: 'Springs need a free cell. Place side springs against a wall, with the base facing the wall.',
   spikes: 'The spikes point in the chosen direction.',
-  laser: 'The beam runs to the next wall. It flashes before it switches on.',
+  fallingSpike: 'A single hanging spike. Shakes briefly, then falls when you move beneath it with a clear drop path. Its underside is lethal; its flat top is safe to stand on. Blocks lasers, disappears on impact and resets when you respawn.',
+  laser: 'The beam stops at solid blocks, moving platforms, crushers and hammer heads. Blink blocks shield only while solid; broken blocks let it through. It flashes before switching on.',
   hammer: 'The pivot can sit in mid-air. The dashed arc shows the swing.',
   saw: 'The saw travels back and forth along the dashed track, even through walls. The end is clipped to the level edge.',
   mover: 'A one-way platform that carries you along its dashed track. You can jump up through it and land on it from above.',
@@ -96,6 +98,22 @@ const ctrl = shallowRef<EditorController | null>(null)
 const tool = ref<ToolId>('tile')
 const mode = ref<'edit' | 'test'>('edit')
 const menuOpen = ref(false)
+const confirmationDialog = ref<HTMLDialogElement | null>(null)
+const confirmation = shallowRef<{ message: string; action: () => void } | null>(null)
+
+function askConfirmation(message: string, action: () => void): void {
+  confirmation.value = { message, action }
+  void nextTick(() => confirmationDialog.value?.showModal())
+}
+function cancelConfirmation(): void {
+  confirmationDialog.value?.close()
+  confirmation.value = null
+}
+function acceptConfirmation(): void {
+  const action = confirmation.value?.action
+  cancelConfirmation()
+  action?.()
+}
 const publishOnly = ref(false)
 const errorsOpen = ref(false)
 const toast = ref('')
@@ -297,14 +315,12 @@ function onFinished(res: { ticks: number; deaths: number; replay: string }): voi
 
 function setSize(size: LevelSize): void {
   if (size === doc.size) return
-  if (
-    doc.wouldLoseContent(size) &&
-    !window.confirm('Shrinking removes blocks and objects at the bottom. Continue?')
-  ) {
-    return
+  const resize = (): void => {
+    doc.resize(size)
+    ctrl.value?.select(null)
   }
-  doc.resize(size)
-  ctrl.value?.select(null)
+  if (doc.wouldLoseContent(size)) askConfirmation('Shrinking removes blocks and objects at the bottom. Continue?', resize)
+  else resize()
 }
 
 function loadFresh(data: LevelData): void {
@@ -317,13 +333,15 @@ function loadFresh(data: LevelData): void {
 }
 
 function newLevel(size: LevelSize): void {
-  if (!window.confirm('The current level will be discarded. Start over?')) return
-  loadFresh(EditorDoc.createStarter(size).toLevelData())
+  askConfirmation('The current level will be discarded. Start over?', () => {
+    loadFresh(EditorDoc.createStarter(size).toLevelData())
+  })
 }
 
 function loadTemplate(data: LevelData): void {
-  if (!window.confirm('The current level will be replaced by the template. Continue?')) return
-  loadFresh(structuredClone(data))
+  askConfirmation('The current level will be replaced by the template. Continue?', () => {
+    loadFresh(structuredClone(data))
+  })
 }
 
 // --- Hochladen zur Freigabe ---------------------------------------------------------
@@ -395,6 +413,7 @@ function downloadTs(): void {
 }
 
 function onKey(e: KeyboardEvent): void {
+  if (confirmation.value) return
   if (mode.value !== 'edit') return
   const tag = (e.target as HTMLElement | null)?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA') return
@@ -896,6 +915,15 @@ onBeforeUnmount(() => {
     </div>
     </Transition>
 
+    <dialog ref="confirmationDialog" class="confirmation-dialog" role="alertdialog" aria-labelledby="confirmation-title" aria-describedby="confirmation-message" @cancel="cancelConfirmation">
+      <div v-if="confirmation" class="card">
+        <h2 id="confirmation-title">Unsaved level changes</h2>
+        <p id="confirmation-message" class="note">{{ confirmation.message }}</p>
+        <button class="ghost" type="button" autofocus @click="cancelConfirmation">Cancel</button>
+        <button class="cta" type="button" @click="acceptConfirmation">Continue</button>
+      </div>
+    </dialog>
+
     <!-- Test run -->
     <GameView
       v-if="mode === 'test' && testData"
@@ -1299,6 +1327,16 @@ onBeforeUnmount(() => {
   padding: 16px;
   background: rgba(10, 6, 30, 0.55);
 }
+
+.confirmation-dialog {
+  width: min(calc(100% - 32px), 436px);
+  max-width: none;
+  max-height: calc(100% - 32px);
+  padding: 0 8px 8px 0;
+  border: 0;
+  background: transparent;
+}
+.confirmation-dialog::backdrop { background: rgba(10, 6, 30, 0.55); }
 
 .card {
   width: min(100%, 420px);

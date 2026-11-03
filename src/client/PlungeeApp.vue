@@ -87,6 +87,11 @@ const visibleLeaderboard = computed(() => {
 const isWeeklyPost = computed(() => postKind.value === 'weekly')
 
 async function initialize(): Promise<void> {
+  if (window.location.pathname.endsWith('/editor.html')) {
+    screen.value = 'menu'
+    await openEditor()
+    return
+  }
   if (window.location.pathname.endsWith('/menu.html')) {
     screen.value = 'menu'
     return
@@ -95,6 +100,11 @@ async function initialize(): Promise<void> {
     const response = await fetch('/api/init')
     if (!response.ok) throw new Error('This Plungee post has no available level.')
     const data = await response.json() as PostInitResponse
+    if (data.kind === 'editor') {
+      screen.value = 'menu'
+      await openEditor()
+      return
+    }
     const level = data.kind === 'community' && data.levelData
       ? { key: data.levelKey, title: data.title, data: data.levelData as LevelEntry['data'], difficulty: 'normal' as const, par: null }
       : LEVELS.find(l => l.key === data.levelKey)
@@ -106,6 +116,11 @@ async function initialize(): Promise<void> {
     postClosesAt.value = data.closesAt ?? null
     postClosed.value = typeof data.closesAt === 'number' && Date.now() >= data.closesAt
     postWeekId.value = data.weekId ?? null
+    if (data.kind === 'campaign') {
+      difficulty.value = level.difficulty
+      startLevel(LEVELS_BY_DIFFICULTY[level.difficulty].findIndex(candidate => candidate.key === level.key))
+      return
+    }
     try {
       const leaderboardResponse = await fetch(postApi('/api/leaderboard'))
       if (leaderboardResponse.ok) releasedLeaderboard.value = await leaderboardResponse.json() as LeaderboardResponse

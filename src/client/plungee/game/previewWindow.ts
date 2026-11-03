@@ -1,7 +1,7 @@
 import type { EntityData, LevelData } from '../sim'
 
 const WEIGHT: Record<EntityData['t'], number> = {
-  spawn: 0, goal: 0.5, checkpoint: 0.5, spring: 1.5, spikes: 2.5,
+  spawn: 0, goal: 0.5, checkpoint: 0.5, spring: 1.5, spikes: 2.5, fallingSpike: 4,
   laser: 5, saw: 5, hammer: 5, crusher: 5, mover: 2.5,
 }
 

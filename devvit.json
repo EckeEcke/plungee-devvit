@@ -13,6 +13,9 @@
       "menu": {
         "entry": "menu.html"
       },
+      "editor": {
+        "entry": "editor.html"
+      },
       "replays": {
         "entry": "replays.html"
       }
@@ -25,11 +28,18 @@
   "menu": {
     "items": [
       {
-        "label": "Create a Plungee test post",
-        "description": "Playable campaign level",
+        "label": "Create editor post",
+        "description": "Create a permanent Build a level entry post",
         "location": "subreddit",
         "forUserType": "moderator",
-        "endpoint": "/internal/menu/post-create"
+        "endpoint": "/internal/menu/editor-create"
+      },
+      {
+        "label": "Create campaign post",
+        "description": "Start the campaign at the first level",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/campaign-create"
       },
       {
         "label": "Create current Weekly Challenge",

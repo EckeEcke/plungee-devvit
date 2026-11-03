@@ -4,7 +4,7 @@ export type PostInitResponse = {
   levelKey: string
   title: string
   username: string | null
-  kind?: 'practice' | 'challenge' | 'weekly' | 'community'
+  kind?: 'practice' | 'campaign' | 'challenge' | 'weekly' | 'community' | 'editor'
   levelData?: unknown
   closesAt?: number
   weekId?: string

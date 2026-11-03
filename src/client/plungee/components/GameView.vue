@@ -106,9 +106,7 @@ let feedbackPlayed = false
 const targets = ref({ gold: 0, silver: 0 })
 /** Local best time on this device; server verification is shown separately. */
 // Steuerung nur im ersten Level der Sitzung zeigen
-const hintAllowed = consumeControlsHint()
-const requiresStart = hintAllowed
-const showHint = computed(() => hintAllowed && hud.value.status !== 'finished' && hud.value.ticks < 360)
+const requiresStart = consumeControlsHint()
 const showStart = computed(() => requiresStart && hud.value.status === 'ready' && !hud.value.started)
 
 /** Unterkante der Bedienleiste (plus etwas Luft) gemessen, damit das Level darunter beginnt und die Figur oben nie verdeckt wird */
@@ -252,15 +250,16 @@ async function shareChallenge(): Promise<void> {
       </Transition>
 
       <div v-if="showStart" class="start-overlay" data-noinput>
-        <button class="start-button" type="button" @click="startGame">Start</button>
+        <div class="start-controls">
+          <button class="start-button" type="button" aria-describedby="start-controls-hint" @click="startGame">Start</button>
+          <div id="start-controls-hint" class="hint">
+            ◀ ▶ or A / D · or hold left / right side · R = restart
+          </div>
+        </div>
       </div>
 
       <div v-if="hud.status === 'ready' && hud.started" class="countdown" aria-live="assertive">
         <span :key="hud.countdown">{{ hud.countdown }}</span>
-      </div>
-
-      <div v-if="showHint" class="hint">
-        ◀ ▶ or A / D · or hold left / right side · R = restart
       </div>
 
       <Transition name="result">
@@ -382,6 +381,7 @@ async function shareChallenge(): Promise<void> {
   align-items: center;
   pointer-events: none;
 }
+
 
 .spacer {
   flex: 1;
@@ -520,6 +520,12 @@ async function shareChallenge(): Promise<void> {
   box-shadow: 5px 5px 0 var(--outline);
 }
 
+.start-controls {
+  position: relative;
+  width: min(420px, calc(100% - 32px));
+  text-align: center;
+}
+
 .start-button:active {
   transform: translate(3px, 3px);
   box-shadow: 2px 2px 0 var(--outline);
@@ -577,10 +583,10 @@ async function shareChallenge(): Promise<void> {
 .hint {
   position: absolute;
   left: 50%;
-  bottom: max(16px, env(safe-area-inset-bottom));
+  top: calc(100% + 16px);
   transform: translateX(-50%);
   width: max-content;
-  max-width: calc(100% - 32px);
+  max-width: 100%;
   text-align: center;
   background: var(--panel);
   color: var(--muted);

@@ -1,18 +1,19 @@
 import { context, reddit } from '@devvit/web/server'
-import { LEVELS } from '../../client/plungee/levels'
+import { LEVELS, LEVELS_BY_DIFFICULTY } from '../../client/plungee/levels'
 import { formatTicks } from '../../client/plungee/sim'
 import type { StoredScore } from './scores'
 
-/** Initial playable test post, until user-generated challenge posts are implemented. */
-export async function createPost() {
+/** Permanent campaign entry post, starting with the first Easy level. */
+export async function createCampaignPost() {
   const subredditName = context.subredditName
-  const level = LEVELS[0]
+  const level = LEVELS_BY_DIFFICULTY.easy[0]
   if (!subredditName || !level) throw new Error('Subreddit or campaign level unavailable')
   return reddit.submitCustomPost({
     subredditName,
     entry: 'default',
-    title: `Play Plungee! · ${level.title}`,
-    postData: { kind: 'practice', levelKey: level.key },
+    title: 'Plungee · Play the Campaign',
+    textFallback: { text: 'Play the Plungee campaign, starting with the first level. Earn medals and improve your times.' },
+    postData: { kind: 'campaign', levelKey: level.key },
   })
 }
 

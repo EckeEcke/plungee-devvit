@@ -80,11 +80,14 @@ api.get('/init', async (c) => {
   try { target = await resolvePlayPost(c.req.query('postId')) }
   catch { return c.json<ApiError>({ error: 'Community level unavailable.' }, 404) }
   const { postId, raw } = target
+  if (postId && raw?.kind === 'editor') {
+    return c.json<PostInitResponse>({ postId, kind: 'editor', levelKey: '', title: 'Build a level', username: context.username ?? null })
+  }
   const level = await postLevel(raw, postId)
   if (!postId || !level) {
     return c.json<ApiError>({ error: 'This post has no playable campaign level.' }, 400)
   }
-  const kind = raw?.kind === 'challenge' || raw?.kind === 'weekly' || raw?.kind === 'practice' || raw?.kind === 'community' ? raw.kind : 'practice'
+  const kind = raw?.kind === 'campaign' || raw?.kind === 'challenge' || raw?.kind === 'weekly' || raw?.kind === 'practice' || raw?.kind === 'community' ? raw.kind : 'practice'
   return c.json<PostInitResponse>({
     postId,
     levelKey: level.key,
