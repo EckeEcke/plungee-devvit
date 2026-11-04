@@ -1,0 +1,29 @@
+*** Begin Patch
+*** Update File: C:/Users/eckar/Desktop/Repos/plungee/tests/ceiling-belt.test.ts
+@@
+ import { test } from 'vitest'
++import type { InputDir } from '../src/sim'
++import type { Particles } from '../src/game/particles'
+@@
+-for (const dir of [-1, 1]) {
++for (const dir of [-1, 1] as const) {
+@@
+-    const events = []
++    const events: string[] = []
+@@
+-    w.step(-dir)
+-    for (let i = 0; i < 5; i++) w.step(-dir)
++    w.step(-dir as InputDir)
++    for (let i = 0; i < 5; i++) w.step(-dir as InputDir)
+@@
+-    w.step(-dir)
++    w.step(-dir as InputDir)
+@@
+-    w.step(-dir)
++    w.step(-dir as InputDir)
+@@
+-  const bursts = []
+-  const renderer = { theme: MEMPHIS_DARK, level: world.level, particles: { burst: (...args) => bursts.push(args) } }
++  const bursts: Parameters<Particles['burst']>[] = []
++  const renderer = { theme: MEMPHIS_DARK, level: world.level, particles: { burst: (...args: Parameters<Particles['burst']>) => bursts.push(args) } }
+*** End Patch
