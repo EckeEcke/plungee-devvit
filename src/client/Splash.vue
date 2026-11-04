@@ -37,6 +37,7 @@ const error = ref('')
 const level = ref<LevelEntry | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
 const postKind = ref<PostInitResponse['kind']>()
+const replayWeek = ref('')
 const targetTicks = ref<number | null>(null)
 const closesAt = ref<number | null>(null)
 const now = ref(Date.now())
@@ -110,6 +111,7 @@ onMounted(async () => {
 
     level.value = entry
     postKind.value = data.kind
+    replayWeek.value = data.weekId ?? ''
     targetTicks.value = data.targetTicks ?? null
     if (data.kind === 'challenge') void loadVersus()
     closesAt.value = typeof data.closesAt === 'number' && Number.isFinite(data.closesAt) ? data.closesAt : null
@@ -122,7 +124,7 @@ onMounted(async () => {
       if (response.ok) {
         const board = await response.json() as { released: boolean; entries: unknown[] }
         replaysAvailable.value = board.released && board.entries.length > 0
-      }
+      } else if (data.kind === 'weeklyReplay') throw new Error('Replays are currently unavailable.')
     }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Could not load level'
@@ -184,10 +186,11 @@ function openEditor(event: MouseEvent): void {
         </div>
       </template>
       <template v-else-if="level">
-        <button class="play" type="button" @click="play">
+        <button v-if="postKind === 'weeklyReplay'" class="play" type="button" :disabled="!replaysAvailable" @click="watchReplays">Watch replays</button>
+        <button v-else class="play" type="button" @click="play">
           ▶ {{ postKind === 'challenge' ? 'Accept challenge' : 'Play' }}
         </button>
-        <button v-if="replaysAvailable" class="watch-replays" type="button" @click="watchReplays">Watch replays</button>
+        <button v-if="replaysAvailable && postKind !== 'weeklyReplay'" class="watch-replays" type="button" @click="watchReplays">Watch replays</button>
 
         <div class="level-preview" aria-label="Preview of the challenge level">
           <canvas ref="canvas" aria-hidden="true" />
@@ -218,13 +221,16 @@ function openEditor(event: MouseEvent): void {
             </div>
             <div class="overlay-copy">
               <p v-if="postKind === 'weekly'" class="weekly-label">Weekly Challenge</p>
-              <p class="challenge-question">{{ postKind === 'campaign' ? 'Play the Campaign' : postKind === 'challenge' ? 'Can you beat my time?' : 'Set the fastest time!' }}</p>
+              <p v-else-if="postKind === 'weeklyReplay'" class="weekly-label">Weekly Replay</p>
+              <p class="challenge-question">{{ postKind === 'weeklyReplay' ? 'Watch the top 5 race!' : postKind === 'campaign' ? 'Play the Campaign' : postKind === 'challenge' ? 'Can you beat my time?' : 'Set the fastest time!' }}</p>
               <p v-if="postKind === 'challenge' && targetTicks !== null" class="challenge-target">{{ formatTicks(targetTicks) }}</p>
               <h2 class="level-name">{{ level.title }}</h2>
               <p v-if="postKind === 'weekly' && weeklyTimeLeft" class="weekly-countdown" role="timer">{{ weeklyTimeLeft }}</p>
+              <p v-else-if="postKind === 'weeklyReplay'" class="weekly-countdown">Week of {{ replayWeek }}</p>
             </div>
           </div>
         </div>
+        <p v-if="postKind === 'weeklyReplay' && !replaysAvailable" class="status">{{ error || 'No verified replays available for this week.' }}</p>
       </template>
 
       <p v-else-if="loading" class="status">Loading challenge…</p>
@@ -233,7 +239,7 @@ function openEditor(event: MouseEvent): void {
         <button class="play" type="button" @click="play">▶ Play</button>
       </template>
 
-      <p v-if="postKind !== 'editor'" class="controls">◀ ▶ to move · Gravity does the rest</p>
+      <p v-if="postKind !== 'editor' && postKind !== 'weeklyReplay'" class="controls">◀ ▶ to move · Gravity does the rest</p>
     </div>
   </main>
 </template>

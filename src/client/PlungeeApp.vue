@@ -84,7 +84,7 @@ const visibleLeaderboard = computed(() => {
   if (response.yourEntry && !entries.some(entry => entry.isCurrentUser)) entries.push(response.yourEntry)
   return entries.sort((a, b) => a.rank - b.rank)
 })
-const isWeeklyPost = computed(() => postKind.value === 'weekly')
+const isWeeklyPost = computed(() => postKind.value === 'weekly' || postKind.value === 'weeklyReplay')
 
 async function initialize(): Promise<void> {
   if (window.location.pathname.endsWith('/editor.html')) {
@@ -124,11 +124,18 @@ async function initialize(): Promise<void> {
     try {
       const leaderboardResponse = await fetch(postApi('/api/leaderboard'))
       if (leaderboardResponse.ok) releasedLeaderboard.value = await leaderboardResponse.json() as LeaderboardResponse
+      else if (data.kind === 'weeklyReplay') throw new Error('Replays are currently unavailable.')
     } catch {
+      if (data.kind === 'weeklyReplay') throw new Error('Replays are currently unavailable.')
       // A closed leaderboard is optional; the challenge remains playable if it is unavailable.
     }
     difficulty.value = level.difficulty
     playDifficulty.value = level.difficulty
+    if (data.kind === 'weeklyReplay') {
+      if (releasedLeaderboard.value?.released && releasedLeaderboard.value.entries.length) screen.value = 'replay'
+      else { notice.value = 'No verified replays available for this week.'; screen.value = 'menu' }
+      return
+    }
     screen.value = window.location.pathname.endsWith('/replays.html') && releasedLeaderboard.value?.released && releasedLeaderboard.value.entries.length
       ? 'replay'
       : 'postPlay'
@@ -375,7 +382,7 @@ const menuText = computed(() => theme.value.ui.text)
       :entries="releasedLeaderboard.entries"
       :your-rank="releasedLeaderboard.yourRank"
       :your-entry="releasedLeaderboard.yourEntry"
-      @exit="screen = 'postPlay'"
+      @exit="screen = postKind === 'weeklyReplay' ? 'menu' : 'postPlay'"
     />
     <GameView
       v-else-if="screen === 'campaignPlay' && activeLevel"

@@ -241,6 +241,8 @@ p {
   outline: 3px solid var(--text);
   outline-offset: 5px;
 }
+.play:disabled { opacity: 0.5; cursor: default; }
+.play:disabled:active { transform: none; box-shadow: 4px 4px 0 var(--outline); }
 
 .controls {
   order: 3;

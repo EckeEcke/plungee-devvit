@@ -43,7 +43,7 @@
       },
       {
         "label": "Create current Weekly Challenge",
-        "description": "Create this week's deterministic challenge post",
+        "description": "Create this week's challenge and last week's replay post",
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/weekly-create"
@@ -62,6 +62,10 @@
       "weekly-challenge": {
         "endpoint": "/internal/scheduler/weekly",
         "cron": "0 0 * * 1"
+      },
+      "weekly-recovery": {
+        "endpoint": "/internal/scheduler/weekly",
+        "cron": "*/15 * * * *"
       }
     }
   },

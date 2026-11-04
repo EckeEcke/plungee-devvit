@@ -4,6 +4,7 @@ import { context, reddit } from '@devvit/web/server'
 import { canModerateLevels } from '../core/moderation'
 import { createCampaignPost } from '../core/post'
 import { ensureCurrentWeeklyChallenge } from '../core/weekly'
+import { postFlair } from '../core/flairs'
 
 export const menu = new Hono()
 menu.post('/editor-create', async c => {
@@ -11,6 +12,7 @@ menu.post('/editor-create', async c => {
     if (!context.subredditName || !await canModerateLevels()) return c.json<UiResponse>({ showToast: 'Subreddit post-moderation permission required.' }, 403)
     const post = await reddit.submitCustomPost({
       subredditName: context.subredditName,
+      ...await postFlair('editor'),
       entry: 'default',
       title: 'Plungee · Build a level',
       textFallback: { text: 'Build your own Plungee level, test it and share it with the community.' },

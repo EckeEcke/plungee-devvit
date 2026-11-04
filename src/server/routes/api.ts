@@ -9,6 +9,8 @@ import { createChallengePost } from '../core/post'
 import { getPersonalBest, getReleasedLeaderboard, recordVerifiedScore } from '../core/scores'
 import { isCommunityBlocked } from '../core/moderation'
 import { startCommunityRun, updateCommunityRun } from '../core/community-stats'
+import { getWeeklyChallenge } from '../core/weekly'
+import { releasedWeeklySource } from '../core/weekly-policy'
 
 export const api = new Hono()
 api.use('*', async (c, next) => {
@@ -18,9 +20,15 @@ api.use('*', async (c, next) => {
 
 /** A requested post is a resource selector, never an identity or trusted level definition. */
 async function resolvePlayPost(requested?: string) {
-  if (!requested || requested === context.postId) {
+  const currentRaw = context.postData as Record<string, unknown> | undefined
+  if (!requested || requested === context.postId || (currentRaw?.kind === 'weeklyReplay' && requested === currentRaw.sourcePostId)) {
+    if (currentRaw?.kind === 'weeklyReplay') {
+      const stored = typeof currentRaw.weekId === 'string' ? await getWeeklyChallenge(currentRaw.weekId) : null
+      const weekly = releasedWeeklySource(currentRaw, stored)
+      return { postId: weekly.postId as `t3_${string}`, raw: { kind: 'weekly', ...weekly } as Record<string, unknown>, weeklyReplay: true }
+    }
     if (context.postId && (context.postData as Record<string, unknown> | undefined)?.kind === 'community' && await isCommunityBlocked(context.postId)) throw new Error('Community level unpublished.')
-    return { postId: context.postId, raw: context.postData as Record<string, unknown> | undefined }
+    return { postId: context.postId, raw: currentRaw, weeklyReplay: false }
   }
   if (!/^t3_[a-z0-9]+$/.test(requested)) throw new Error('Invalid community post.')
   if (await isCommunityBlocked(requested)) throw new Error('Community level unpublished.')
@@ -32,7 +40,7 @@ async function resolvePlayPost(requested?: string) {
   if (post.subredditName.toLowerCase() !== context.subredditName?.toLowerCase()) throw new Error('Community post belongs to another subreddit.')
   const raw = await post.getPostData() as Record<string, unknown> | undefined
   if (raw?.kind !== 'community') throw new Error('Not a community level post.')
-  return { postId: post.id, raw }
+  return { postId: post.id, raw, weeklyReplay: false }
 }
 
 async function challengeProfile(userId: string | undefined): Promise<ChallengeProfile> {
@@ -87,7 +95,7 @@ api.get('/init', async (c) => {
   if (!postId || !level) {
     return c.json<ApiError>({ error: 'This post has no playable campaign level.' }, 400)
   }
-  const kind = raw?.kind === 'campaign' || raw?.kind === 'challenge' || raw?.kind === 'weekly' || raw?.kind === 'practice' || raw?.kind === 'community' ? raw.kind : 'practice'
+  const kind = target.weeklyReplay ? 'weeklyReplay' : raw?.kind === 'campaign' || raw?.kind === 'challenge' || raw?.kind === 'weekly' || raw?.kind === 'practice' || raw?.kind === 'community' ? raw.kind : 'practice'
   return c.json<PostInitResponse>({
     postId,
     levelKey: level.key,

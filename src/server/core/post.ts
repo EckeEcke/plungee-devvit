@@ -2,6 +2,8 @@ import { context, reddit } from '@devvit/web/server'
 import { LEVELS, LEVELS_BY_DIFFICULTY } from '../../client/plungee/levels'
 import { formatTicks } from '../../client/plungee/sim'
 import type { StoredScore } from './scores'
+import { postFlair } from './flairs'
+import type { WeeklyChallenge } from './weekly-policy'
 
 /** Permanent campaign entry post, starting with the first Easy level. */
 export async function createCampaignPost() {
@@ -32,6 +34,7 @@ export async function createChallengePost(levelKey: string, sourcePostId: string
     subredditName,
     entry: 'default',
     runAs: 'USER',
+    ...await postFlair('challenge'),
     userGeneratedContent: {
       text: challengeText,
     },
@@ -69,10 +72,25 @@ export async function createWeeklyPost(weekId: string, startsAt: number, closesA
   return reddit.submitCustomPost({
     subredditName,
     entry: 'default',
+    ...await postFlair('weekly'),
     title: `Plungee Weekly Challenge · ${level.title}`,
     textFallback: {
       text: `Plungee Weekly Challenge\n\nCan you set the fastest verified time on ${level.title}?\nThis challenge runs until ${new Date(closesAt).toISOString()}.`,
     },
     postData: { kind: 'weekly', weekId, levelKey: level.key, startsAt, closesAt },
+  })
+}
+
+/** App-owned spectator post: it references the original weekly scores, never a new board. */
+export async function createWeeklyReplayPost(previous: WeeklyChallenge) {
+  const subredditName = context.subredditName
+  const level = LEVELS.find(candidate => candidate.key === previous.levelKey)
+  if (!subredditName || !level || previous.closesAt > Date.now()) throw new Error('Previous weekly replay unavailable.')
+  return reddit.submitCustomPost({
+    subredditName, entry: 'default', ...await postFlair('weeklyReplay'),
+    title: `Plungee Weekly Replay · ${level.title} · ${previous.weekId}`,
+    textFallback: { text: `Watch the top 5 race from the Plungee Weekly Challenge starting ${previous.weekId}: ${level.title}.` },
+    postData: { kind: 'weeklyReplay', weekId: previous.weekId, levelKey: previous.levelKey,
+      sourcePostId: previous.postId, startsAt: previous.startsAt, closesAt: previous.closesAt },
   })
 }

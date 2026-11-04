@@ -6,6 +6,7 @@ import type { CommunityLevelMeta } from '../../shared/api'
 import { indexCommunityBatch } from '../core/catalog'
 import { isCommunityBlocked } from '../core/moderation'
 import { hasControlCharacters } from '../../shared/text'
+import { postFlair } from '../core/flairs'
 import { getCommunityStats, deleteCommunityStats, deleteOwnCommunityStats } from '../core/community-stats'
 
 export const community = new Hono()
@@ -96,6 +97,7 @@ community.post('/community', async c => {
     const closesAt = Date.now() + 7 * 86400000
     const post = await reddit.submitCustomPost({
       subredditName: context.subredditName, entry: 'default', runAs: 'USER',
+      ...await postFlair('community'),
       title: `I built this level. Can you beat my time? · ${value.title.trim()}`,
       userGeneratedContent: { text: postText },
       textFallback: { text: postText },
