@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { context, redis, reddit } from '@devvit/web/server'
-import { canModerateLevels, moderationKey } from '../core/moderation'
+import { canModerateLevels, moderationKey, clearCommunityReports, communityReportCount } from '../core/moderation'
 import type { CommunityLevelMeta } from '../../shared/api'
 import { deleteCommunityStats } from '../core/community-stats'
 
@@ -20,7 +20,7 @@ moderation.get('/levels', async c => {
     const [raw, stored, state] = await Promise.all([
       redis.get(`plungee:v1:post:${member}:meta`), redis.get(`plungee:v1:post:${member}:level`), redis.get(moderationKey(member)),
     ])
-    if (raw && stored) levels.push({ ...JSON.parse(raw), unpublished: Boolean(state) })
+    if (raw && stored) levels.push({ ...JSON.parse(raw), unpublished: Boolean(state), reportCount: await communityReportCount(member) })
   }
   const offset = Math.max(0, Math.floor(Number(c.req.query('offset')) || 0))
   return c.json({ levels: levels.slice(offset, offset + 20), total: levels.length })
@@ -40,6 +40,7 @@ moderation.post('/levels/:postId', async c => {
   if (input.action === 'restore') {
     if (!await redis.get(`plungee:v1:post:${id}:level`)) return c.json({ error: 'Level data no longer exists.' }, 409)
     await redis.del(key)
+    await clearCommunityReports(id)
   } else if (input.action === 'unpublish') {
     await redis.set(key, JSON.stringify({ action: 'unpublish', userId: String(context.userId), at: Date.now() }))
   } else {

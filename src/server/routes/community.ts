@@ -4,11 +4,10 @@ import { compileLevel, decodeInputs, simulate, validateLevel, LEVEL_ROWS, LEVEL_
 import { levelHash } from '../../client/plungee/editor/hash'
 import type { CommunityLevelMeta } from '../../shared/api'
 import { indexCommunityBatch } from '../core/catalog'
-import { isCommunityBlocked } from '../core/moderation'
+import { isCommunityBlocked, reportCommunityLevel, deleteOwnCommunityReports } from '../core/moderation'
 import { hasControlCharacters } from '../../shared/text'
 import { postFlair } from '../core/flairs'
 import { getCommunityStats, deleteCommunityStats, deleteOwnCommunityStats } from '../core/community-stats'
-import { ensureScoreThread } from '../core/score-comments'
 
 export const community = new Hono()
 const TTL = 90 * 86400
@@ -54,6 +53,15 @@ community.get('/community', async c => {
   }
   const page = await Promise.all(levels.slice(offset, offset + limit).map(async level => ({ ...level, stats: await getCommunityStats(level.id) })))
   return c.json({ levels: page, total: levels.length })
+})
+
+community.post('/community/:postId/report', async c => {
+  if (!context.userId) return c.json({ error: 'Sign in to report a level.' }, 401)
+  const postId = c.req.param('postId')
+  if (!/^t3_[a-z0-9]+$/i.test(postId)) return c.json({ error: 'Invalid level.' }, 400)
+  if (!await redis.get(`plungee:v1:post:${postId}:level`)) return c.json({ error: 'Level not found.' }, 404)
+  const result = await reportCommunityLevel(postId, String(context.userId))
+  return c.json(result)
 })
 
 community.get('/editor/draft', async c => {
@@ -104,7 +112,6 @@ community.post('/community', async c => {
       textFallback: { text: postText },
       postData: { kind: 'community', levelKey, closesAt, creatorUserId: String(context.userId) },
     })
-    await ensureScoreThread(post.id)
     // The creator test proves solvability and supplies the post copy only.
     // Do not record a score here; regular play uses /api/verify for every user.
     const key = `plungee:v1:post:${post.id}:level`
@@ -127,6 +134,7 @@ community.post('/community', async c => {
 community.delete('/community/mine', async c => {
   if (!context.userId) return c.json({ error: 'Sign in required.' }, 401)
   await deleteOwnCommunityStats()
+  await deleteOwnCommunityReports(String(context.userId))
   const userKey = `plungee:v2:user:${context.userId}:levels`
   const legacyKey = `plungee:v1:user:${context.userId}:levels`
   const levels = { ...await redis.hGetAll(legacyKey), ...await redis.hGetAll(userKey) }

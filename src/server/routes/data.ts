@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { context, redis } from '@devvit/web/server'
 import { deleteOwnScores } from '../core/scores'
 import { deleteOwnCommunityStats, deleteCommunityStats } from '../core/community-stats'
+import { deleteOwnCommunityReports } from '../core/moderation'
 
 export const data = new Hono()
 data.delete('/my-data', async c => {
@@ -9,6 +10,7 @@ data.delete('/my-data', async c => {
   const id = String(context.userId)
   await deleteOwnScores()
   await deleteOwnCommunityStats()
+  await deleteOwnCommunityReports(id)
   const oldIndex = `plungee:v1:user:${id}:levels`
   const newIndex = `plungee:v2:user:${id}:levels`
   const levels = { ...await redis.hGetAll(oldIndex), ...await redis.hGetAll(newIndex) }

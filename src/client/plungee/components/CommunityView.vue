@@ -17,6 +17,8 @@ const levels = ref<OnlineMeta[]>([])
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
+const reporting = ref('')
+const reported = ref(new Set<string>())
 
 /** Verwirft Antworten veralteter Anfragen (schnelles Umschalten der Reiter) */
 let ticket = 0
@@ -53,6 +55,19 @@ async function load(reset: boolean): Promise<void> {
 }
 
 onMounted(() => load(true))
+
+async function reportLevel(id: string): Promise<void> {
+  if (reporting.value || reported.value.has(id)) return
+  reporting.value = id
+  try {
+    const response = await fetch(`/api/community/${encodeURIComponent(id)}/report`, { method: 'POST' })
+    const data = await response.json() as { error?: string }
+    if (!response.ok) throw new Error(data.error ?? 'Could not report level.')
+    reported.value = new Set(reported.value).add(id)
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Could not report level.'
+  } finally { reporting.value = '' }
+}
 
 
 const canMore = computed(
@@ -130,6 +145,7 @@ const SIZE_TEXT: Record<string, string> = {
               <span v-if="l.stats?.firstClear" class="p fc"><svg class="flag" viewBox="0 0 12 14" fill="currentColor" aria-hidden="true"><path d="M1 0h1v14H1zM3 1h8L8 4l3 3H3z" /></svg><span class="fc-name">First clear: {{ l.stats.firstClear.username ?? 'Deleted user' }}</span></span>
 
             </button>
+            <button class="report" type="button" :disabled="reporting === l.id || reported.has(l.id)" @click="reportLevel(l.id)">{{ reported.has(l.id) ? 'Reported' : reporting === l.id ? 'Reporting…' : 'Report' }}</button>
           </li>
         </ul>
 

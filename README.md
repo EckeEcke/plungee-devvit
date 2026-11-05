@@ -51,6 +51,8 @@ npm run dev
 
 The Devvit social flow is implemented: verified personal scores, community levels, challenges, result comments, released leaderboards and replay presentation are backed by server-side Reddit identity where required. The browser never supplies a user ID or username.
 
+Community levels can be reported from the in-app community list. Each authenticated Reddit user can report a level once. At 10 reports from distinct users, the level is automatically hidden from the catalogue and disabled for play until a subreddit moderator reviews it and chooses **Approve / restore** in the moderation view. Restoring a level clears its report counter. Reports are stored server-side in Redis and are included in the authenticated user's data deletion.
+
 ## Redis score foundation
 
 `/api/verify` always simulates the submitted replay before it can be stored. For an authenticated Reddit request, `src/server/core/scores.ts` stores the best verified result using:

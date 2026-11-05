@@ -4,7 +4,6 @@ import { formatTicks } from '../../client/plungee/sim'
 import type { StoredScore } from './scores'
 import { postFlair } from './flairs'
 import type { WeeklyChallenge } from './weekly-policy'
-import { ensureScoreThread } from './score-comments'
 
 /** Permanent campaign entry post, starting with the first Easy level. */
 export async function createCampaignPost() {
@@ -53,7 +52,6 @@ export async function createChallengePost(levelKey: string, sourcePostId: string
       creatorBestTicks: personalBest.ticks,
     },
   })
-  await ensureScoreThread(post.id)
   return post
 }
 

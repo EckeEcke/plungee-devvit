@@ -5,7 +5,7 @@ import type { Theme } from '../game/theme'
 import type { CommunityLevelMeta } from '../../../shared/api'
 defineProps<{ theme: Theme }>()
 const emit = defineEmits<{ exit: [] }>()
-type Row = CommunityLevelMeta & { unpublished: boolean }
+type Row = CommunityLevelMeta & { unpublished: boolean; reportCount: number }
 const levels = ref<Row[]>([])
 const total = ref(0)
 const loading = ref(false)
@@ -67,10 +67,10 @@ onMounted(() => { void load() })
           <li v-for="level in levels" :key="level.id" class="item">
             <div class="play moderation-row">
               <span class="t">{{ level.title }}</span>
-              <span class="m">by {{ level.author }} · {{ level.unpublished ? 'Unpublished' : 'Published' }}</span>
+              <span class="m">by {{ level.author }} · {{ level.unpublished ? 'Hidden' : 'Published' }}<template v-if="level.reportCount"> · {{ level.reportCount }} reports</template></span>
               <a class="post-link" :href="'https://www.reddit.com/comments/' + level.id.slice(3)">View Reddit post</a>
               <div class="mod-actions">
-                <button class="more" type="button" :disabled="Boolean(busy)" @click="act(level, level.unpublished ? 'restore' : 'unpublish')">{{ level.unpublished ? 'Restore' : 'Unpublish' }}</button>
+                <button class="more" type="button" :disabled="Boolean(busy)" @click="act(level, level.unpublished ? 'restore' : 'unpublish')">{{ level.unpublished ? 'Approve / restore' : 'Hide' }}</button>
                 <button v-if="level.unpublished" class="more danger-action" type="button" :disabled="Boolean(busy)" @click="deleting = level.id; confirmation = ''">Delete permanently…</button>
               </div>
               <div v-if="deleting === level.id" class="delete-confirm">
