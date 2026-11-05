@@ -8,6 +8,7 @@ import { isCommunityBlocked } from '../core/moderation'
 import { hasControlCharacters } from '../../shared/text'
 import { postFlair } from '../core/flairs'
 import { getCommunityStats, deleteCommunityStats, deleteOwnCommunityStats } from '../core/community-stats'
+import { ensureScoreThread } from '../core/score-comments'
 
 export const community = new Hono()
 const TTL = 90 * 86400
@@ -103,6 +104,7 @@ community.post('/community', async c => {
       textFallback: { text: postText },
       postData: { kind: 'community', levelKey, closesAt, creatorUserId: String(context.userId) },
     })
+    await ensureScoreThread(post.id)
     // The creator test proves solvability and supplies the post copy only.
     // Do not record a score here; regular play uses /api/verify for every user.
     const key = `plungee:v1:post:${post.id}:level`

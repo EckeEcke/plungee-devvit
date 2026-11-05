@@ -43,15 +43,13 @@ npm run dev
 - `src/shared/api.ts` — typed API responses
 - `devvit.json` — Reddit app configuration and entrypoints
 
-## Explicitly not yet implemented
+## Remaining production work
 
-- User-level posts, score comments and the client UI for released leaderboards/top-five ghosts
-- User ID–based persistence, retention/deletion and post deletion handlers
-- Weekly post scheduler, frozen seven-day standings, creator's optional result/replay post and next-visit reminder
-- UGC editor posting workflow (the browser editor and private links are **not** mounted in this milestone)
 - Separate Devvit-specific privacy documentation and Reddit production approval
+- UGC editor posting workflow and private links remain limited to the current in-app flow
+- On-Reddit playtest and deployment verification
 
-Do **not** treat the test post, client-side local best or the current `/api/verify` response as a complete production social feature. Personal scores and the first challenge/leaderboard API are now persisted when Reddit identity is available; result comments, custom user levels and the frontend leaderboard/ghost presentation remain open.
+The Devvit social flow is implemented: verified personal scores, community levels, challenges, result comments, released leaderboards and replay presentation are backed by server-side Reddit identity where required. The browser never supplies a user ID or username.
 
 ## Redis score foundation
 
@@ -59,9 +57,11 @@ Do **not** treat the test post, client-side local best or the current `/api/veri
 
 - `plungee:v1:post:<postId>:scores` — per-user score records for the post
 - `plungee:v1:post:<postId>:leaderboard` — sorted-set foundation ordered by verified ticks
-- `plungee:v1:user:<userId>:scores` — user index for future deletion and retention work
+- `plungee:v2:user:<userId>:scores` — user index used for deletion and retention
 
-The user ID and display name come from server-side `context.userId` and `context.username`; neither is accepted from the client. Score records expire after 90 days. Each record also contains the validated `color`, `eyes`, `pattern` and `patternColor` snapshot used for that best run. If the user improves the time with another character, the snapshot is replaced. `/api/leaderboard` releases only the top five records, including character snapshots and replays, after the challenge's seven-day close timestamp; before that it returns no foreign results.
+The user ID and display name come from server-side `context.userId` and `context.username`; neither is accepted from the client. Per-post score records and leaderboards expire after 90 days. The user score index also expires 90 days after the user's last improved verified score, so 90 days without a score update removes the stored score index automatically. Each record contains the validated `color`, `eyes`, `pattern` and `patternColor` snapshot used for that best run. If the user improves the time with another character, the snapshot is replaced. `/api/leaderboard` releases only the top five records, including character snapshots and replays, after the challenge's seven-day close timestamp; before that it returns no foreign results.
+
+`DELETE /api/my-data` removes the authenticated user's stored scores, community statistics, drafts, challenge state and score-comment references from Redis. It does not delete Reddit posts or comments that have already been published; those remain subject to Reddit's own controls and deletion flow. Community-level content and its post metadata are removed from the app's Redis catalogue when the creator requests data deletion, while the Reddit post itself remains.
 
 ## Build status
 

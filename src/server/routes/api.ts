@@ -11,6 +11,7 @@ import { isCommunityBlocked } from '../core/moderation'
 import { startCommunityRun, updateCommunityRun } from '../core/community-stats'
 import { getWeeklyChallenge } from '../core/weekly'
 import { releasedWeeklySource } from '../core/weekly-policy'
+import { ensureScoreThread } from '../core/score-comments'
 
 export const api = new Hono()
 api.use('*', async (c, next) => {
@@ -193,7 +194,8 @@ api.post('/result-comment', async c => {
     const text = raw?.kind === 'community'
       ? `I finished this Plungee level! My verified time: ${formatTicks(best.ticks)} · ${deathText(best.deaths)}.`
       : bragText(best.ticks, Number(raw?.creatorBestTicks), best.deaths, TICK_RATE)
-    const comment = await reddit.submitComment({ id: postId, runAs: 'USER', text })
+    const scoreThreadId = await ensureScoreThread(postId)
+    const comment = await reddit.submitComment({ id: scoreThreadId, runAs: 'USER', text })
     await redis.hSet(key, { [postId]: comment.id })
     await redis.expire(key, 90 * 86400)
     return c.json({ posted: true })

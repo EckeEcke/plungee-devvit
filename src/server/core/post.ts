@@ -4,6 +4,7 @@ import { formatTicks } from '../../client/plungee/sim'
 import type { StoredScore } from './scores'
 import { postFlair } from './flairs'
 import type { WeeklyChallenge } from './weekly-policy'
+import { ensureScoreThread } from './score-comments'
 
 /** Permanent campaign entry post, starting with the first Easy level. */
 export async function createCampaignPost() {
@@ -30,7 +31,7 @@ export async function createChallengePost(levelKey: string, sourcePostId: string
   const createdAt = Date.now()
   const closesAt = createdAt + CHALLENGE_DURATION_MS
   const challengeText = `Can you beat my time of ${formatTicks(personalBest.ticks)} on ${level.title}?`
-  return reddit.submitCustomPost({
+  const post = await reddit.submitCustomPost({
     subredditName,
     entry: 'default',
     runAs: 'USER',
@@ -52,6 +53,8 @@ export async function createChallengePost(levelKey: string, sourcePostId: string
       creatorBestTicks: personalBest.ticks,
     },
   })
+  await ensureScoreThread(post.id)
+  return post
 }
 
 export function weeklyLevelFor(weekId: string) {

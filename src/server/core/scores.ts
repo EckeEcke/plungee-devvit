@@ -215,6 +215,9 @@ export async function recordVerifiedScore(
   // Keep score records bounded while the user index remains available for cleanup.
   await redis.expire(hash, SCORE_TTL_SECONDS)
   await redis.expire(leaderboardKey(postId), SCORE_TTL_SECONDS)
+  // The user's complete score index follows the user's last score update.
+  // After 90 days without an improved verified score, it expires automatically.
+  await redis.expire(userIndex(identity.userId), SCORE_TTL_SECONDS)
 
   return {
     userId: identity.userId,
