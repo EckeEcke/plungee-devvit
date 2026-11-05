@@ -32,6 +32,7 @@ const deleting = ref(false)
 const canPostResult = ref(false)
 const resultRunId = ref('')
 const resultCommentStatus = ref('')
+const resultCommentDraft = ref('')
 const postLevel = ref<LevelEntry | null>(null)
 const activePostId = ref('')
 function postApi(path: string): string {
@@ -212,6 +213,7 @@ async function onPostFinished(run: { ticks: number; deaths: number; replay: stri
   canPostResult.value = false
   resultRunId.value = ''
   resultCommentStatus.value = ''
+  resultCommentDraft.value = ''
   const campaign = screen.value === 'campaignPlay'
   const level = campaign ? activeLevel.value : postLevel.value
   if (!level) return
@@ -230,6 +232,11 @@ async function onPostFinished(run: { ticks: number; deaths: number; replay: stri
     if (request !== finishRequest) return
     postClosed.value = verified.closed
     canPostResult.value = verified.canPostResult
+    resultCommentDraft.value = verified.canPostResult
+      ? postKind.value === 'community'
+        ? `I finished this Plungee level! My verified time: ${formatTicks(verified.ticks)} · ${verified.deaths === 0 ? 'without dying' : verified.deaths === 1 ? 'only died once' : `${verified.deaths} deaths`}.`
+        : `I beat the level in ${formatTicks(verified.ticks)}! ${verified.deaths === 0 ? 'without dying' : verified.deaths === 1 ? 'only died once' : `${verified.deaths} deaths`}`
+      : ''
     resultRunId.value = verified.resultRunId ?? ''
     const savedMessage = verified.ticks !== run.ticks || verified.deaths !== run.deaths
       ? 'Replay mismatch — result not accepted'
@@ -276,12 +283,15 @@ async function createChallenge(): Promise<void> {
     if (sourceFinishRequest === finishRequest && screen.value === sourceScreen) challengeStatus.value = error instanceof Error ? error.message : 'Challenge creation failed.'
   }
 }
+function updateResultDraft(text: string): void {
+  resultCommentDraft.value = text
+}
 async function postResultComment(): Promise<void> {
   if (resultCommentStatus.value) return
   resultCommentStatus.value = 'Posting…'
   try {
     const response = await fetch(postApi('/api/result-comment'), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resultRunId: resultRunId.value }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resultRunId: resultRunId.value, text: resultCommentDraft.value }),
     })
     const result = await response.json() as { error?: string }
     if (!response.ok) throw new Error(result.error ?? 'Could not post result.')
@@ -353,7 +363,9 @@ const menuText = computed(() => theme.value.ui.text)
       :verification="verification"
       :can-post-result="canPostResult"
       :result-comment-status="resultCommentStatus"
+      :result-comment-draft="resultCommentDraft"
       @post-result="postResultComment"
+      @update-result-draft="updateResultDraft"
       :allow-challenge="postKind === 'practice'"
       :brag="postKind === 'challenge'"
       :target-ticks="targetTicks"

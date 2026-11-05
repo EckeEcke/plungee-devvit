@@ -170,11 +170,11 @@ api.post('/result-comment', async c => {
   if (raw?.kind !== 'community' && (raw?.kind !== 'challenge' || typeof raw.creatorBestTicks !== 'number')) {
     return c.json<ApiError>({ error: 'This result cannot be posted as a challenge win.' }, 400)
   }
+  let payload: { resultRunId?: unknown; text?: unknown } = {}
+  try { payload = await c.req.json() as { resultRunId?: unknown; text?: unknown } }
+  catch { /* Community result posts do not need a run token. */ }
   let best: { ticks: number; deaths: number } | null = null
   if (raw?.kind === 'challenge') {
-    let payload: { resultRunId?: unknown }
-    try { payload = await c.req.json() }
-    catch { return c.json<ApiError>({ error: 'Verified run missing.' }, 400) }
     const encoded = await redis.hGet(`plungee:v1:user:${context.userId}:brag-runs`, postId)
     if (encoded) {
       const run = JSON.parse(encoded) as { id: string; ticks: number; deaths: number }
@@ -191,9 +191,12 @@ api.post('/result-comment', async c => {
   try {
     if (await redis.hGet(key, postId)) return c.json({ posted: true })
     const { formatTicks } = await import('../../client/plungee/sim')
-    const text = raw?.kind === 'community'
+    const generatedText = raw?.kind === 'community'
       ? `I finished this Plungee level! My verified time: ${formatTicks(best.ticks)} · ${deathText(best.deaths)}.`
       : bragText(best.ticks, Number(raw?.creatorBestTicks), best.deaths, TICK_RATE)
+    const text = typeof payload.text === 'string' && payload.text.trim().length > 0
+      ? payload.text.trim().slice(0, 500)
+      : generatedText
     const scoreThreadId = await ensureScoreThread(postId)
     const comment = await reddit.submitComment({ id: scoreThreadId, runAs: 'USER', text })
     await redis.hSet(key, { [postId]: comment.id })

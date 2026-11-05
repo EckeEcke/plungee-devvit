@@ -39,6 +39,7 @@ const props = withDefaults(
     brag?: boolean
     targetTicks?: number | null
     resultCommentStatus?: string
+    resultCommentDraft?: string
     /** Zusätzliche Ghosts (Top 5 eines Community-Levels) */
     ghosts?: GhostSpec[]
   }>(),
@@ -51,6 +52,7 @@ const emit = defineEmits<{
   createChallenge: []
   watchReplay: []
   postResult: []
+  updateResultDraft: [text: string]
   publishLevel: []
 }>()
 
@@ -322,7 +324,11 @@ async function shareChallenge(): Promise<void> {
           <button v-if="replayAvailable" class="ghost replay-action" type="button" @click="emit('watchReplay')">Watch top-5 replay</button>
           <button v-if="canPublishLevel" class="ghost challenge" type="button" @click="emit('publishLevel')">Publish level</button>
           <div v-if="canPostResult || resultCommentStatus" class="result-action-slot" :class="{ 'brag-slot': brag }" :aria-busy="resultCommentStatus === 'Posting…'">
-            <button :class="[brag ? 'ghost challenge brag-pop' : 'ghost replay-action', { 'pending-action': Boolean(resultCommentStatus) }]" type="button" :disabled="Boolean(resultCommentStatus)" @click="emit('postResult')">{{ brag ? 'Brag' : 'Post my result' }}</button>
+            <template v-if="canPostResult">
+              <label class="result-comment-label" for="result-comment">Comment</label>
+              <textarea id="result-comment" class="result-comment-input" :value="resultCommentDraft ?? ''" maxlength="500" rows="3" @input="emit('updateResultDraft', ($event.target as HTMLTextAreaElement).value)" />
+            </template>
+            <button :class="[brag ? 'ghost challenge brag-pop' : 'ghost replay-action', { 'pending-action': Boolean(resultCommentStatus) }]" type="button" :disabled="Boolean(resultCommentStatus)" @click="emit('postResult')">Post my result</button>
             <div v-if="resultCommentStatus" class="challenge-action-state" :class="{ 'result-posted': resultCommentStatus === 'Result posted!' }" role="status">
               <span v-if="resultCommentStatus === 'Posting…'" class="verification-spinner" aria-hidden="true" />
               <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
