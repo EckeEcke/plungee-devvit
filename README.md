@@ -6,9 +6,9 @@ The Reddit app is named **Plungee**. The **Devvit app slug** is `plungee-game` a
 
 - Vue 3 replaces the React example frontend in the official Devvit Web **0.15.1** starter.
 - Inline post (`splash.html`) shows the challenge level and a **Play** button.
-- Play opens `game.html` in expanded mode and **starts that post's level immediately**; no home-screen detour.
+- Play opens `game.html` in expanded mode. Challenge posts **start that post's level immediately**; campaign posts open the campaign level selection.
 - The post's `levelKey` is bound in `postData` when the test post is created, and validated server-side.
-- Original Plungee simulation, renderer, 67 campaign levels, audio, Character editor and Memphis light/dark themes are included.
+- Original Plungee simulation, renderer, 75 campaign levels, audio, Character editor and Memphis light/dark themes are included.
 - On finish, `/api/verify` deterministically simulates the replay on the Devvit server and persists an improved personal score for the authenticated Reddit user.
 - Verified finishes are now persisted for the current Reddit user when `context.userId` is available. The browser never supplies identity data.
 - Finishing shows **Continue in Campaign**, where levels can be played sequentially. Campaign/character visuals are from the web version. Device-local campaign progress, character, audio and own best replay are temporary migration defaults, **not Reddit-account-backed data**.
@@ -54,6 +54,8 @@ The Devvit social flow is implemented: verified personal scores, community level
 Community levels can be reported from the in-app community list. Each authenticated Reddit user can report a level once. At 10 reports from distinct users, the level is automatically hidden from the catalogue and disabled for play until a subreddit moderator reviews it and chooses **Approve / restore** in the moderation view. Restoring a level clears its report counter. Reports are stored server-side in Redis and are included in the authenticated user's data deletion.
 
 ## Redis score foundation
+
+Campaign entry posts are scheduled every Thursday at 00:00 UTC, three days after the Monday 00:00 UTC Weekly Challenge. Scheduled campaign publishing deduplicates each UTC week and recovers already-submitted posts on retry. The fixed subreddit button can keep linking to the original permanent campaign post.
 
 `/api/verify` always simulates the submitted replay before it can be stored. For an authenticated Reddit request, `src/server/core/scores.ts` stores the best verified result using:
 

@@ -9,7 +9,7 @@ import { createChallengePost } from '../core/post'
 import { getPersonalBest, getReleasedLeaderboard, recordVerifiedScore } from '../core/scores'
 import { isCommunityBlocked } from '../core/moderation'
 import { startCommunityRun, updateCommunityRun } from '../core/community-stats'
-import { getWeeklyChallenge } from '../core/weekly'
+import { currentWeeklyWindow, getWeeklyChallenge } from '../core/weekly'
 import { releasedWeeklySource } from '../core/weekly-policy'
 import { ensureScoreThread } from '../core/score-comments'
 
@@ -32,6 +32,14 @@ async function resolvePlayPost(requested?: string) {
     return { postId: context.postId, raw: currentRaw, weeklyReplay: false }
   }
   if (!/^t3_[a-z0-9]+$/.test(requested)) throw new Error('Invalid community post.')
+  const weekly = await getWeeklyChallenge(currentWeeklyWindow().weekId)
+  if (weekly?.postId === requested) {
+    const post = await reddit.getPostById(requested as `t3_${string}`)
+    if (post.removed || post.spam || post.subredditName.toLowerCase() !== context.subredditName?.toLowerCase()) throw new Error('Weekly challenge unavailable.')
+    const raw = await post.getPostData() as Record<string, unknown> | undefined
+    if (raw?.kind !== 'weekly' || raw.weekId !== weekly.weekId || raw.levelKey !== weekly.levelKey || raw.closesAt !== weekly.closesAt) throw new Error('Weekly challenge unavailable.')
+    return { postId: post.id, raw, weeklyReplay: false }
+  }
   if (await isCommunityBlocked(requested)) throw new Error('Community level unpublished.')
   const meta = await redis.get(`plungee:v1:post:${requested}:meta`)
   const level = await redis.get(`plungee:v1:post:${requested}:level`)
@@ -83,6 +91,13 @@ function challengeClose(raw = context.postData as Record<string, unknown> | unde
   if (typeof raw.closesAt !== 'number') return null
   return raw.closesAt
 }
+
+/** Read the already-published weekly; opening the menu never creates Reddit posts. */
+api.get('/weekly', async c => {
+  const weekly = await getWeeklyChallenge(currentWeeklyWindow().weekId)
+  if (!weekly || weekly.closesAt <= Date.now()) return c.json<ApiError>({ error: 'The weekly challenge is not available yet.' }, 404)
+  return c.json({ postId: weekly.postId })
+})
 
 api.get('/init', async (c) => {
   let target

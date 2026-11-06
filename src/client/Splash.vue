@@ -188,11 +188,11 @@ function openEditor(event: MouseEvent): void {
       <template v-else-if="level">
         <button v-if="postKind === 'weeklyReplay'" class="play" type="button" :disabled="!replaysAvailable" @click="watchReplays">Watch replays</button>
         <button v-else class="play" type="button" @click="play">
-          ▶ {{ postKind === 'challenge' ? 'Accept challenge' : 'Play' }}
+          ▶ {{ postKind === 'campaign' ? 'Play Campaign' : postKind === 'challenge' ? 'Accept challenge' : 'Play' }}
         </button>
         <button v-if="replaysAvailable && postKind !== 'weeklyReplay'" class="watch-replays" type="button" @click="watchReplays">Watch replays</button>
 
-        <div class="level-preview" aria-label="Preview of the challenge level">
+        <div class="level-preview" :aria-label="postKind === 'campaign' ? 'Preview of the Plungee campaign' : 'Preview of the challenge level'">
           <canvas ref="canvas" aria-hidden="true" />
           <div class="level-overlay">
             <CharacterCanvas
@@ -224,7 +224,8 @@ function openEditor(event: MouseEvent): void {
               <p v-else-if="postKind === 'weeklyReplay'" class="weekly-label">Weekly Replay</p>
               <p class="challenge-question">{{ postKind === 'weeklyReplay' ? 'Watch the top 5 race!' : postKind === 'campaign' ? 'Play the Campaign' : postKind === 'challenge' ? 'Can you beat my time?' : 'Set the fastest time!' }}</p>
               <p v-if="postKind === 'challenge' && targetTicks !== null" class="challenge-target">{{ formatTicks(targetTicks) }}</p>
-              <h2 class="level-name">{{ level.title }}</h2>
+              <h2 class="level-name">{{ postKind === 'campaign' ? `${LEVELS.length} levels · Easy / Normal / Hard` : level.title }}</h2>
+              <p v-if="postKind === 'campaign'" class="weekly-countdown">Choose a level. Earn medals. Beat your best.</p>
               <p v-if="postKind === 'weekly' && weeklyTimeLeft" class="weekly-countdown" role="timer">{{ weeklyTimeLeft }}</p>
               <p v-else-if="postKind === 'weeklyReplay'" class="weekly-countdown">Week of {{ replayWeek }}</p>
             </div>

@@ -118,8 +118,7 @@ async function initialize(): Promise<void> {
     postClosed.value = typeof data.closesAt === 'number' && Date.now() >= data.closesAt
     postWeekId.value = data.weekId ?? null
     if (data.kind === 'campaign') {
-      difficulty.value = level.difficulty
-      startLevel(LEVELS_BY_DIFFICULTY[level.difficulty].findIndex(candidate => candidate.key === level.key))
+      screen.value = 'campaign'
       return
     }
     try {
@@ -170,19 +169,37 @@ async function openEditor(): Promise<void> {
     notice.value = error instanceof Error ? error.message : 'Editor unavailable'
   }
 }
-async function playCommunityPost(id: string): Promise<void> {
+async function openWeeklyChallenge(): Promise<void> {
+  screen.value = 'loading'
+  notice.value = ''
+  try {
+    const response = await fetch('/api/weekly')
+    const data = await response.json() as { postId?: string; error?: string }
+    if (!response.ok || !data.postId || !/^t3_[a-z0-9]+$/.test(data.postId)) throw new Error(data.error ?? 'Weekly challenge unavailable.')
+    await playCommunityPost(data.postId, 'weekly')
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'Weekly challenge unavailable.'
+    screen.value = 'menu'
+  }
+}
+async function playCommunityPost(id: string, kind: 'community' | 'weekly' = 'community'): Promise<void> {
   if (!/^t3_[a-z0-9]+$/.test(id)) return
   ++finishRequest
   screen.value = 'loading'
   notice.value = ''
   try {
     const response = await fetch(`/api/init?postId=${encodeURIComponent(id)}`)
-    if (!response.ok) throw new Error('Community level unavailable.')
+    if (!response.ok) throw new Error(kind === 'weekly' ? 'Weekly challenge unavailable.' : 'Community level unavailable.')
     const data = await response.json() as PostInitResponse
-    if (data.kind !== 'community' || !data.levelData) throw new Error('Community level unavailable.')
-    postLevel.value = { key: data.levelKey, title: data.title, data: data.levelData as LevelEntry['data'], difficulty: 'normal', par: null }
+    if (data.kind !== kind) throw new Error('Challenge unavailable.')
+    const level = kind === 'community' && data.levelData
+      ? { key: data.levelKey, title: data.title, data: data.levelData as LevelEntry['data'], difficulty: 'normal' as const, par: null }
+      : kind === 'weekly' ? LEVELS.find(level => level.key === data.levelKey) : null
+    if (!level) throw new Error('Level unavailable.')
+    postLevel.value = level
     activePostId.value = data.postId
-    postKind.value = 'community'
+    postKind.value = kind
+    postWeekId.value = data.weekId ?? null
     targetTicks.value = null
     postClosesAt.value = data.closesAt ?? null
     postClosed.value = typeof data.closesAt === 'number' && Date.now() >= data.closesAt
@@ -460,6 +477,7 @@ const menuText = computed(() => theme.value.ui.text)
 
       <div v-if="screen === 'menu'" class="buttons">
         <button v-if="screen === 'menu'" class="play" type="button" @click="screen = 'campaign'">Campaign</button>
+        <button class="build" type="button" @click="openWeeklyChallenge">Weekly Challenge</button>
         <button v-if="screen === 'menu'" class="build" type="button" @click="screen = 'character'">Character</button>
         <button class="build" type="button" @click="openEditor">Build a level</button>
         <button class="build" type="button" @click="screen = 'community'">Community levels</button>

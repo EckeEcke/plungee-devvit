@@ -20,7 +20,7 @@ function bounds(entity: EntityData, data: LevelData): [number, number] {
     const direction = entity.dir === 'u' ? -1 : 1
     for (let row = entity.y + direction; row >= 0 && row < data.tiles.length; row += direction) {
       const tile = data.tiles[row]?.[entity.x] ?? '#'
-      if ('#I<>BXO'.includes(tile)) break
+      if ('#I<>CBXO'.includes(tile)) break
       top = Math.min(top, row)
       bottom = Math.max(bottom, row + 1)
     }

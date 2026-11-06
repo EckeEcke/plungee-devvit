@@ -5,8 +5,8 @@ import type { StoredScore } from './scores'
 import { postFlair } from './flairs'
 import type { WeeklyChallenge } from './weekly-policy'
 
-/** Permanent campaign entry post, starting with the first Easy level. */
-export async function createCampaignPost() {
+/** Permanent campaign entry post; the first Easy level supplies the preview backdrop. */
+export async function createCampaignPost(campaignWeekId?: string) {
   const subredditName = context.subredditName
   const level = LEVELS_BY_DIFFICULTY.easy[0]
   if (!subredditName || !level) throw new Error('Subreddit or campaign level unavailable')
@@ -14,8 +14,8 @@ export async function createCampaignPost() {
     subredditName,
     entry: 'default',
     title: 'Plungee · Play the Campaign',
-    textFallback: { text: 'Play the Plungee campaign, starting with the first level. Earn medals and improve your times.' },
-    postData: { kind: 'campaign', levelKey: level.key },
+    textFallback: { text: `Play the Plungee campaign: ${LEVELS.length} levels across Easy, Normal and Hard. Choose a level, earn medals and improve your times. Use this post as your permanent campaign entry.` },
+    postData: { kind: 'campaign', levelKey: level.key, ...(campaignWeekId ? { campaignWeekId } : {}) },
   })
 }
 
