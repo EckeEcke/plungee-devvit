@@ -3,8 +3,20 @@ import type { TaskRequest, TaskResponse } from '@devvit/scheduler'
 import { ensureCurrentWeeklyChallenge } from '../core/weekly'
 import { indexCommunityBatch } from '../core/catalog'
 import { ensureWeeklyCampaignPost } from '../core/campaign'
+import { runDailyPrivacyCleanup } from '../core/privacy'
 
 export const scheduler = new Hono()
+for (const path of ['/privacy-cleanup', '/privacy-cleanup-batch']) {
+  scheduler.post(path, async c => {
+    try {
+      await runDailyPrivacyCleanup(path === '/privacy-cleanup')
+      return c.json<TaskResponse>({})
+    } catch {
+      console.error('Privacy cleanup deferred; unfinished work will be retried.')
+      return c.json<TaskResponse>({}, 500)
+    }
+  })
+}
 scheduler.post('/campaign', async c => {
   try {
     const postId = await ensureWeeklyCampaignPost()

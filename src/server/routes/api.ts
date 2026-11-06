@@ -12,6 +12,7 @@ import { startCommunityRun, updateCommunityRun } from '../core/community-stats'
 import { currentWeeklyWindow, getWeeklyChallenge } from '../core/weekly'
 import { releasedWeeklySource } from '../core/weekly-policy'
 import { ensureScoreThread } from '../core/score-comments'
+import { trackPrivacyUser } from '../core/privacy'
 
 export const api = new Hono()
 api.use('*', async (c, next) => {
@@ -38,6 +39,7 @@ async function resolvePlayPost(requested?: string) {
     if (post.removed || post.spam || post.subredditName.toLowerCase() !== context.subredditName?.toLowerCase()) throw new Error('Weekly challenge unavailable.')
     const raw = await post.getPostData() as Record<string, unknown> | undefined
     if (raw?.kind !== 'weekly' || raw.weekId !== weekly.weekId || raw.levelKey !== weekly.levelKey || raw.closesAt !== weekly.closesAt) throw new Error('Weekly challenge unavailable.')
+    if (context.userId) await trackPrivacyUser(String(context.userId), requested)
     return { postId: post.id, raw, weeklyReplay: false }
   }
   if (await isCommunityBlocked(requested)) throw new Error('Community level unpublished.')
@@ -49,6 +51,7 @@ async function resolvePlayPost(requested?: string) {
   if (post.subredditName.toLowerCase() !== context.subredditName?.toLowerCase()) throw new Error('Community post belongs to another subreddit.')
   const raw = await post.getPostData() as Record<string, unknown> | undefined
   if (raw?.kind !== 'community') throw new Error('Not a community level post.')
+  if (context.userId) await trackPrivacyUser(String(context.userId), requested)
   return { postId: post.id, raw, weeklyReplay: false }
 }
 

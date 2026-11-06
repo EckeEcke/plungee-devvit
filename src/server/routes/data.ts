@@ -3,6 +3,7 @@ import { context, redis } from '@devvit/web/server'
 import { deleteOwnScores } from '../core/scores'
 import { deleteOwnCommunityStats, deleteCommunityStats } from '../core/community-stats'
 import { deleteOwnCommunityReports } from '../core/moderation'
+import { eraseAccountIdentity } from '../core/privacy'
 
 export const data = new Hono()
 data.delete('/my-data', async c => {
@@ -20,5 +21,6 @@ data.delete('/my-data', async c => {
     await redis.zRem('plungee:v1:community:levels', [postId])
   }
   await redis.del(oldIndex, newIndex, `plungee:v1:user:${id}:draft`, `plungee:v1:user:${id}:comments`, `plungee:v1:user:${id}:brag-runs`)
+  await eraseAccountIdentity(id)
   return c.json({ deleted: true })
 })

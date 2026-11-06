@@ -4,6 +4,7 @@ import { formatTicks } from '../../client/plungee/sim'
 import type { StoredScore } from './scores'
 import { postFlair } from './flairs'
 import type { WeeklyChallenge } from './weekly-policy'
+import { trackPrivacyPost } from './privacy'
 
 /** Permanent campaign entry post; the first Easy level supplies the preview backdrop. */
 export async function createCampaignPost(campaignWeekId?: string) {
@@ -52,6 +53,7 @@ export async function createChallengePost(levelKey: string, sourcePostId: string
       creatorBestTicks: personalBest.ticks,
     },
   })
+  await trackPrivacyPost(post.id, String(context.userId))
   return post
 }
 

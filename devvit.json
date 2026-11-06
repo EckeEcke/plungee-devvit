@@ -58,6 +58,14 @@
   },
   "scheduler": {
     "tasks": {
+      "privacy-cleanup": {
+        "endpoint": "/internal/scheduler/privacy-cleanup",
+        "cron": "0 3 * * *"
+      },
+      "privacy-cleanup-batch": {
+        "endpoint": "/internal/scheduler/privacy-cleanup-batch",
+        "cron": "*/15 * * * *"
+      },
       "community-index": {
         "endpoint": "/internal/scheduler/community-index",
         "cron": "*/5 * * * *"

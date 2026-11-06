@@ -8,6 +8,7 @@ import { isCommunityBlocked, reportCommunityLevel, deleteOwnCommunityReports } f
 import { hasControlCharacters } from '../../shared/text'
 import { postFlair } from '../core/flairs'
 import { getCommunityStats, deleteCommunityStats, deleteOwnCommunityStats } from '../core/community-stats'
+import { trackPrivacyPost } from '../core/privacy'
 
 export const community = new Hono()
 const TTL = 90 * 86400
@@ -115,6 +116,7 @@ community.post('/community', async c => {
     // The creator test proves solvability and supplies the post copy only.
     // Do not record a score here; regular play uses /api/verify for every user.
     const key = `plungee:v1:post:${post.id}:level`
+    await trackPrivacyPost(post.id, String(context.userId))
     await redis.set(key, JSON.stringify(value.level))
     const userKey = `plungee:v2:user:${context.userId}:levels`
     await redis.hSet(userKey, { [post.id]: JSON.stringify({ levelKey, title: value.title.trim() }) })

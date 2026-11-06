@@ -8,8 +8,13 @@ import { scheduler } from './routes/scheduler'
 import { community } from './routes/community'
 import { data } from './routes/data'
 import { moderation } from './routes/moderation'
+import { trackPrivacyContext } from './core/privacy'
 
 const app = new Hono()
+app.use('/api/*', async (_c, next) => {
+  await trackPrivacyContext()
+  await next()
+})
 const internal = new Hono()
 internal.route('/menu', menu)
 internal.route('/triggers', triggers)

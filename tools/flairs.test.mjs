@@ -5,7 +5,7 @@ import { flairForPost, matchingFlair } from '../src/server/core/flair-policy.ts'
 
 const mocks = { context: { subredditName: 'plungee_test', userId: 't2_player' }, reddit: {}, redis: {} }
 globalThis.__plungeeFlairTest = mocks
-const stub = 'data:text/javascript,' + encodeURIComponent('const mock = globalThis.__plungeeFlairTest; export const context=mock.context; export const reddit=mock.reddit; export const redis=mock.redis;')
+const stub = 'data:text/javascript,' + encodeURIComponent('const mock = globalThis.__plungeeFlairTest; export const context=mock.context; export const reddit=mock.reddit; export const redis=mock.redis; export const scheduler={};')
 registerHooks({ resolve(specifier, context, nextResolve) {
   if (specifier === '@devvit/web/server') return { url: stub, shortCircuit: true }
   if (specifier === '../../client/plungee/levels') return { url: 'data:text/javascript,' + encodeURIComponent('export const LEVELS=[{key:"easy/test", title:"Test", data:{}, difficulty:"easy"}]; export const LEVELS_BY_DIFFICULTY={easy:LEVELS};'), shortCircuit: true }
@@ -32,6 +32,7 @@ function setup(templates = []) {
   }
   mocks.redis.set = async key => { if (locks.has(key)) return ''; locks.add(key); return 'OK' }
   mocks.redis.del = async key => { locks.delete(key) }
+  mocks.redis.hSetNX = async () => 1
   return { templates, calls, locks }
 }
 test('all requested post types get the correct flair, including community and replay posts', () => {

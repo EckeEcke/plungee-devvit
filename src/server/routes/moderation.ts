@@ -3,6 +3,7 @@ import { context, redis, reddit } from '@devvit/web/server'
 import { canModerateLevels, moderationKey, clearCommunityReports, communityReportCount } from '../core/moderation'
 import type { CommunityLevelMeta } from '../../shared/api'
 import { deleteCommunityStats } from '../core/community-stats'
+import { trackPrivacyUser } from '../core/privacy'
 
 export const moderation = new Hono()
 moderation.use('*', async (c, next) => {
@@ -28,6 +29,7 @@ moderation.get('/levels', async c => {
 moderation.post('/levels/:postId', async c => {
   const id = c.req.param('postId')
   if (!/^t3_[a-z0-9]+$/.test(id)) return c.json({ error: 'Invalid post ID.' }, 400)
+  await trackPrivacyUser(String(context.userId), id)
   let input: { action?: unknown; confirmation?: unknown }
   try { input = await c.req.json() } catch { return c.json({ error: 'Invalid request.' }, 400) }
   if (!['unpublish', 'restore', 'delete'].includes(String(input?.action))) return c.json({ error: 'Unknown action.' }, 400)
