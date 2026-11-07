@@ -9,6 +9,7 @@ import { prepareDraft } from './plungee/editor/storage'
 import CampaignView from './plungee/components/CampaignView.vue'
 import CharacterView from './plungee/components/CharacterView.vue'
 import CharacterCanvas from './plungee/components/CharacterCanvas.vue'
+import LegalView from './plungee/components/LegalView.vue'
 import { applyLook, DEFAULT_LOOK, look, sanitizeLook } from './plungee/game/look'
 import { MEMPHIS_DARK } from './plungee/game/theme'
 import { DIFFICULTIES, LEVELS, LEVELS_BY_DIFFICULTY, type Difficulty, type LevelEntry } from './plungee/levels'
@@ -18,8 +19,13 @@ import { formatTicks } from './plungee/sim'
 import type { LeaderboardResponse, PostInitResponse, VerifyRunResponse } from '../shared/api'
 import type { GhostSpec } from './plungee/game/ghost'
 
-type Screen = 'loading' | 'postPlay' | 'replay' | 'campaign' | 'campaignPlay' | 'character' | 'menu' | 'error' | 'editor' | 'community' | 'moderation'
+type Screen = 'loading' | 'postPlay' | 'replay' | 'campaign' | 'campaignPlay' | 'character' | 'menu' | 'error' | 'editor' | 'community' | 'moderation' | 'legal'
 const screen = ref<Screen>('loading')
+const legalPage = ref<'privacy' | 'terms' | 'support'>('privacy')
+function openLegal(page: typeof legalPage.value): void {
+  legalPage.value = page
+  screen.value = 'legal'
+}
 const moderationAllowed = ref(false)
 onMounted(async () => {
   try { moderationAllowed.value = (await fetch('/api/moderation/access')).ok }
@@ -444,6 +450,7 @@ const menuText = computed(() => theme.value.ui.text)
       @exit="screen = 'menu'"
       @play="startLevel"
     />
+    <LegalView v-else-if="screen === 'legal'" :theme="theme" :page="legalPage" @page="legalPage = $event" @exit="screen = 'menu'" />
     <ModerationView v-else-if="screen === 'moderation'" :theme="theme" @exit="screen = 'menu'" />
     <CommunityView v-else-if="screen === 'community'" :theme="theme" @exit="screen = 'menu'" @play="playCommunityPost" />
     <EditorView v-else-if="screen === 'editor'" :theme="theme" @exit="screen = 'menu'" />
@@ -488,6 +495,11 @@ const menuText = computed(() => theme.value.ui.text)
       <p v-if="screen === 'menu' && notice" class="status" role="alert">{{ notice }}</p>
       <a v-if="screen === 'menu'" class="data-link" href="#delete-data" @click.prevent="settingsOpen = true">Delete saved data</a>
       <a v-if="screen === 'menu' && moderationAllowed" class="data-link" href="#moderation" @click.prevent="screen = 'moderation'">Moderate levels</a>
+      <nav v-if="screen === 'menu'" class="legal-links" aria-label="Privacy, terms and support">
+        <a href="/privacy.html" @click.prevent="openLegal('privacy')">Privacy</a>
+        <a href="/terms.html" @click.prevent="openLegal('terms')">Terms</a>
+        <a href="/support.html" @click.prevent="openLegal('support')">Help &amp; Support</a>
+      </nav>
       <section v-if="screen === 'menu' && settingsOpen" id="delete-data" class="data-settings">
         <h2>Delete my saved data</h2>
         <p>Deletes your scores, replays, saved character snapshots, editor draft and published level data from Plungee. Your community levels will stop being playable. Reddit posts and comments remain.</p>
@@ -504,6 +516,8 @@ const menuText = computed(() => theme.value.ui.text)
 </template>
 
 <style scoped>
+.legal-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; }
+.legal-links a { color: var(--muted); font-size: 13px; padding: 8px 0; }
 .notice {
   position: fixed;
   left: 50%;

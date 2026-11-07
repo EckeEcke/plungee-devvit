@@ -22,11 +22,14 @@ api.use('*', async (c, next) => {
 
 /** A requested post is a resource selector, never an identity or trusted level definition. */
 async function resolvePlayPost(requested?: string) {
+  const targetId = requested || context.postId
+  if (targetId && await redis.get(`plungee:v1:post:${targetId}:deleted`)) throw new Error('Post deleted.')
   const currentRaw = context.postData as Record<string, unknown> | undefined
   if (!requested || requested === context.postId || (currentRaw?.kind === 'weeklyReplay' && requested === currentRaw.sourcePostId)) {
     if (currentRaw?.kind === 'weeklyReplay') {
       const stored = typeof currentRaw.weekId === 'string' ? await getWeeklyChallenge(currentRaw.weekId) : null
       const weekly = releasedWeeklySource(currentRaw, stored)
+      if (await redis.get(`plungee:v1:post:${weekly.postId}:deleted`)) throw new Error('Weekly source post deleted.')
       return { postId: weekly.postId as `t3_${string}`, raw: { kind: 'weekly', ...weekly } as Record<string, unknown>, weeklyReplay: true }
     }
     if (context.postId && (context.postData as Record<string, unknown> | undefined)?.kind === 'community' && await isCommunityBlocked(context.postId)) throw new Error('Community level unpublished.')

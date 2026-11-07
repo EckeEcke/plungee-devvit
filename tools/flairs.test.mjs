@@ -9,7 +9,7 @@ const stub = 'data:text/javascript,' + encodeURIComponent('const mock = globalTh
 registerHooks({ resolve(specifier, context, nextResolve) {
   if (specifier === '@devvit/web/server') return { url: stub, shortCircuit: true }
   if (specifier === '../../client/plungee/levels') return { url: 'data:text/javascript,' + encodeURIComponent('export const LEVELS=[{key:"easy/test", title:"Test", data:{}, difficulty:"easy"}]; export const LEVELS_BY_DIFFICULTY={easy:LEVELS};'), shortCircuit: true }
-  if (specifier === '../../client/plungee/sim') return { url: 'data:text/javascript,' + encodeURIComponent('export const formatTicks=ticks=>(ticks/60).toFixed(2);'), shortCircuit: true }
+  if (specifier === '../../client/plungee/sim') return { url: 'data:text/javascript,' + encodeURIComponent('export const formatTicks=ticks=>(ticks/60).toFixed(2); export const decodeInputs=()=>new Int8Array();'), shortCircuit: true }
   try { return nextResolve(specifier, context) }
   catch (error) {
     if (error.code !== 'ERR_MODULE_NOT_FOUND' || !specifier.startsWith('.') || /\.[a-z]+$/i.test(specifier)) throw error
@@ -33,6 +33,7 @@ function setup(templates = []) {
   mocks.redis.set = async key => { if (locks.has(key)) return ''; locks.add(key); return 'OK' }
   mocks.redis.del = async key => { locks.delete(key) }
   mocks.redis.hSetNX = async () => 1
+  mocks.redis.get = async () => undefined
   return { templates, calls, locks }
 }
 test('all requested post types get the correct flair, including community and replay posts', () => {

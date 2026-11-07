@@ -11,6 +11,7 @@ type Run = { postId: string; userId: string; replay: string; deaths: number; fin
 
 export async function startCommunityRun(postId: string, creatorId: unknown): Promise<string> {
   if (!context.userId) throw new Error('Sign in required.')
+  if (await redis.get(`plungee:v1:post:${postId}:deleted`)) throw new Error('Post deleted.')
   const userId = String(context.userId)
   const id = crypto.randomUUID()
   await redis.hSet(userIndex(userId), { [postId]: '1' })
@@ -18,6 +19,13 @@ export async function startCommunityRun(postId: string, creatorId: unknown): Pro
   await redis.expire(runIndex(userId), 90 * 86400)
   await redis.hSetNX(usersKey(postId), userId, JSON.stringify({ username: context.username ?? null, deaths: 0, clearedAt: null, eligible: userId !== creatorId } satisfies Player))
   await redis.set(runKey(id), JSON.stringify({ postId, userId, replay: '', deaths: 0, finished: false } satisfies Run), { expiration: new Date(Date.now() + 86400000) })
+  if (await redis.get(`plungee:v1:post:${postId}:deleted`)) {
+    await redis.del(runKey(id))
+    await redis.hDel(userIndex(userId), [postId])
+    await redis.hDel(runIndex(userId), [id])
+    await redis.hDel(usersKey(postId), [userId])
+    throw new Error('Post deleted.')
+  }
   return id
 }
 

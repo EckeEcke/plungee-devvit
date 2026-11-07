@@ -1,5 +1,6 @@
 import { context, redis, reddit, scheduler } from '@devvit/web/server'
 import type { JsonObject } from '@devvit/shared-types/json.js'
+import { deletedPostKey, retryContentDeletions } from './content-deletion'
 
 const USERS = 'plungee:v1:privacy:users'
 const POSTS = 'plungee:v1:privacy:posts'
@@ -28,12 +29,14 @@ export async function trackPrivacyContext(): Promise<void> {
 /** Called by publishers before returning a new user-authored post to the client. */
 export async function trackPrivacyPost(postId: string, creatorId?: string): Promise<void> {
   if (!validPost(postId)) return
+  if (await redis.get(deletedPostKey(postId))) return
   await redis.hSetNX(POSTS, postId, '1')
   if (creatorId) await trackPrivacyUser(creatorId, postId)
 }
 
 /** Discover legacy score/report/player rows even if their author never visits again. */
 export async function indexPrivacyPost(postId: string): Promise<void> {
+  if (await redis.get(deletedPostKey(postId))) return
   await trackPrivacyPost(postId)
   for (const suffix of ['scores', 'players', 'reports']) {
     const records = await redis.hGetAll(`plungee:v1:post:${postId}:${suffix}`)
@@ -91,11 +94,11 @@ export async function eraseAccountIdentity(id: string): Promise<void> {
       if (record.userId === id) { delete record.userId; await redis.set(`${base}:moderation`, JSON.stringify(record)) }
     }
     // PostData is also hosted app storage; removing Redis records alone is insufficient.
-    const post = await reddit.getPostById(postId as `t3_${string}`)
-    const raw = await post.getPostData() as Record<string, unknown> | undefined
+    const post = await redis.get(deletedPostKey(postId)) ? null : await reddit.getPostById(postId as `t3_${string}`)
+    const raw = await post?.getPostData() as Record<string, unknown> | undefined
     if (raw?.creatorUserId === id) {
       owned.add(postId)
-      await post.setPostData(withoutAuthorIdentity(raw) as JsonObject)
+      await post!.setPostData(withoutAuthorIdentity(raw) as JsonObject)
     }
     if (owned.has(postId)) {
       const encoded = await redis.get(`${base}:meta`)
@@ -156,6 +159,7 @@ export async function runDailyPrivacyCleanup(start = true, now = Date.now()): Pr
   if (await redis.set(lock, token, { nx: true, expiration: new Date(now + 120000) }) !== 'OK') return
   let more: boolean
   try {
+    await retryContentDeletions()
     const encoded = await redis.get(JOB)
     let state = encoded ? JSON.parse(encoded) as JobState : null
     const day = new Date(now).toISOString().slice(0, 10)

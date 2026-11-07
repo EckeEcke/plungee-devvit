@@ -1,5 +1,6 @@
 import { context, redis } from '@devvit/web/server'
 import type { LeaderboardEntry, StoredLook } from '../../shared/api'
+import { COLORS, EYES, PATTERNS, PATTERN_COLORS } from '../../shared/character-options'
 
 const SCORE_VERSION = 'v1'
 const SCORE_TTL_SECONDS = 90 * 24 * 60 * 60
@@ -88,10 +89,10 @@ function parseScore(raw: string | undefined): StoredScore | null {
   return null
 }
 
-const LOOK_COLORS = new Set(['pink', 'orange', 'lime', 'green', 'blue', 'purple'])
-const LOOK_EYES = new Set(['round', 'big', 'small', 'sleepy', 'lashes'])
-const LOOK_PATTERNS = new Set(['none', 'stripes', 'dots', 'checks', 'stars', 'hearts'])
-const LOOK_PATTERN_COLORS = new Set(['white', 'ink', 'yellow', 'rose', 'mint', 'sky', 'orange'])
+const LOOK_COLORS = new Set<string>(COLORS.map(option => option.id))
+const LOOK_EYES = new Set<string>(EYES.map(option => option.id))
+const LOOK_PATTERNS = new Set<string>(PATTERNS.map(option => option.id))
+const LOOK_PATTERN_COLORS = new Set<string>(PATTERN_COLORS.map(option => option.id))
 
 function isStoredLook(value: unknown): value is StoredLook {
   if (!value || typeof value !== 'object') return false
@@ -208,9 +209,17 @@ export async function recordVerifiedScore(
 
   // Recheck after asynchronous reads: verification started before close may finish after it.
   if (closesAt !== null && Date.now() >= closesAt) return null
+  if (await redis.get(`plungee:v1:post:${postId}:deleted`)) return null
   await redis.hSet(hash, { [identity.userId]: encoded })
   await redis.hSet(userIndex(identity.userId), { [postId]: encoded })
   await redis.zAdd(leaderboardKey(postId), { member: identity.userId, score: score.ticks })
+  // A deletion may arrive between the pre-write check and the asynchronous writes.
+  if (await redis.get(`plungee:v1:post:${postId}:deleted`)) {
+    await redis.hDel(hash, [identity.userId])
+    await redis.hDel(userIndex(identity.userId), [postId])
+    await redis.zRem(leaderboardKey(postId), [identity.userId])
+    return null
+  }
 
   // Keep score records bounded while the user index remains available for cleanup.
   await redis.expire(hash, SCORE_TTL_SECONDS)

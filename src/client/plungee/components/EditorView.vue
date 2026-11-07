@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { navigateTo } from '@devvit/web/client'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import {
   CRUSHER_REACHES,
@@ -889,7 +890,7 @@ onBeforeUnmount(() => {
 
         <section>
           <h3>Publish community level</h3>
-          <p v-if="publishedUrl" class="note"><a :href="publishedUrl">Open your Reddit level post</a></p>
+          <p v-if="publishedUrl" class="note"><a :href="publishedUrl" @click.prevent="navigateTo(publishedUrl)">Open your Reddit level post</a></p>
           <p v-if="!verified" class="note">
             To upload a level, play it to the goal once yourself (▶ Test). Any change invalidates the test.
           </p>

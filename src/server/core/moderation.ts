@@ -41,5 +41,5 @@ export async function canModerateLevels(): Promise<boolean> {
 }
 
 export async function isCommunityBlocked(postId: string): Promise<boolean> {
-  return Boolean(await redis.get(moderationKey(postId)))
+  return Boolean(await redis.get(`plungee:v1:post:${postId}:deleted`)) || Boolean(await redis.get(moderationKey(postId)))
 }

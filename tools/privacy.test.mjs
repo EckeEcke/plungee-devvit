@@ -7,9 +7,12 @@ globalThis.__plungeePrivacyTest = mocks
 const stub = 'data:text/javascript,' + encodeURIComponent('const m=globalThis.__plungeePrivacyTest; export const context=m.context; export const redis=m.redis; export const reddit=m.reddit; export const scheduler=m.scheduler;')
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === '@devvit/web/server') return { url: stub, shortCircuit: true }
+  if (specifier === '../../client/plungee/sim') return { url: 'data:text/javascript,export const decodeInputs=()=>new Int8Array()', shortCircuit: true }
+  if (specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) return next(`${specifier}.ts`, context)
   return next(specifier, context)
 } })
 const { trackPrivacyUser, trackPrivacyPost, indexPrivacyPost, checkPrivacyUser, eraseAccountIdentity, runDailyPrivacyCleanup } = await import('../src/server/core/privacy.ts')
+const { deletePostContent, deleteCommentContent, retryContentDeletions } = await import('../src/server/core/content-deletion.ts')
 const USERS = 'plungee:v1:privacy:users'
 const POSTS = 'plungee:v1:privacy:posts'
 const DAY = 86400000
@@ -24,6 +27,7 @@ function setup() {
     set: async (key, value, options) => { if (options?.nx && strings.has(key)) return ''; strings.set(key, value); return 'OK' },
     del: async (...keys) => { for (const key of keys) { strings.delete(key); hashes.delete(key); sorted.delete(key) } },
     hGetAll: async key => ({ ...hash(key) }),
+    hGet: async (key, field) => hash(key)[field],
     hSet: async (key, values) => Object.assign(hash(key), values),
     hSetNX: async (key, field, value) => { if (field in hash(key)) return 0; hash(key)[field] = value; return 1 },
     hDel: async (key, fields) => { for (const field of fields) delete hash(key)[field] },
@@ -189,4 +193,68 @@ test('initial discovery failures leave resumable work for the recovery job', asy
   mocks.reddit.getNewPosts = () => ({ all: async () => [] })
   await runDailyPrivacyCleanup(false)
   assert.equal(JSON.parse(s.strings.get('plungee:v1:privacy:job')).phase, 'posts')
+})
+
+test('post deletion removes all related app content and leaves only an ID tombstone', async () => {
+  const s = setup()
+  const post = postFixture(s)
+  await trackPrivacyUser(id, post.id)
+  await trackPrivacyUser('t2_other', post.id)
+  s.hash(`plungee:v2:user:${id}:levels`)[post.id] = '{"title":"Delete this"}'
+  s.hash(`plungee:v2:user:t2_other:scores`)[post.id] = '{"replay":"R20"}'
+  s.hash(`plungee:v1:post:${post.id}:players`).t2_other = '{}'
+  s.hash('plungee:v1:user:t2_other:community-runs').run = post.id
+  s.strings.set('plungee:v1:community-run:run', '{"replay":"R20"}')
+  s.strings.set(`plungee:v1:post:${post.id}:level`, '{"title":"Delete this"}')
+  s.strings.set(`plungee:v1:post:${post.id}:meta`, '{"title":"Delete this"}')
+  s.hash(`${prefix}:comments`)[post.id] = 't1_result'
+  s.sorted.set('plungee:v1:community:levels', new Set([post.id]))
+  await deletePostContent(post.id, id)
+  await deletePostContent(post.id, id)
+  assert.deepEqual(post.data, {})
+  assert.equal(s.strings.get(`plungee:v1:post:${post.id}:deleted`), '1')
+  assert.equal(s.strings.has(`plungee:v1:post:${post.id}:level`), false)
+  assert.equal(s.strings.has(`plungee:v1:post:${post.id}:meta`), false)
+  assert.equal(s.strings.has('plungee:v1:community-run:run'), false)
+  assert.equal(s.hash(`plungee:v2:user:${id}:levels`)[post.id], undefined)
+  assert.equal(s.hash('plungee:v2:user:t2_other:scores')[post.id], undefined)
+  assert.equal(s.hash(`${prefix}:comments`)[post.id], undefined)
+  assert.equal(s.hash('plungee:v1:content-deletions')[post.id], undefined)
+  await indexPrivacyPost(post.id)
+  assert.equal(s.hash(POSTS)[post.id], undefined, 'late indexing cannot resurrect a deleted post')
+})
+
+test('comment deletion removes only its matching reference and keeps valid scores', async () => {
+  const s = setup()
+  await trackPrivacyUser(id, 't3_level')
+  s.hash(`${prefix}:comments`).t3_level = 't1_result'
+  s.hash('plungee:v1:post:t3_level:scores')[id] = 'valid score'
+  await deleteCommentContent('t1_old', 't3_level', id)
+  assert.equal(s.hash(`${prefix}:comments`).t3_level, 't1_result')
+  await deleteCommentContent('t1_result', 't3_level', id)
+  assert.equal(s.hash(`${prefix}:comments`).t3_level, undefined)
+  assert.equal(s.hash('plungee:v1:post:t3_level:scores')[id], 'valid score')
+})
+
+test('failed Reddit post-data cleanup remains queued and succeeds on recovery', async () => {
+  const s = setup()
+  const post = postFixture(s)
+  await trackPrivacyPost(post.id)
+  const setData = post.setPostData
+  post.setPostData = async () => { throw Error('503 Reddit unavailable') }
+  await assert.rejects(deletePostContent(post.id), /503/)
+  assert.equal(s.hash('plungee:v1:content-deletions')[post.id], post.id)
+  post.setPostData = setData
+  await retryContentDeletions()
+  assert.deepEqual(post.data, {})
+  assert.equal(s.hash('plungee:v1:content-deletions')[post.id], undefined)
+})
+
+test('unrelated subreddit deletions do not enroll users or create app records', async () => {
+  const s = setup()
+  postFixture(s, 't3_other', {})
+  await deletePostContent('t3_other', 't2_unrelated')
+  await deleteCommentContent('t1_other', 't3_other', 't2_unrelated')
+  assert.deepEqual(s.hash(USERS), {})
+  assert.equal(s.strings.has('plungee:v1:post:t3_other:deleted'), false)
 })
