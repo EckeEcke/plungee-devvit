@@ -104,6 +104,14 @@ community.post('/community', async c => {
     const deaths = result.deaths === 0 ? 'without dying' : `with ${result.deaths} ${result.deaths === 1 ? 'death' : 'deaths'}`
     const postText = `I made this Plungee level and finished it in ${time} s ${deaths}. Think you can do better? Give it a try!`
     const levelKey = `community:${levelHash(value.level)}`
+    const userKey = `plungee:v2:user:${context.userId}:levels`
+    const publishLock = `plungee:v1:user:${context.userId}:publish:${levelKey}`
+    if (await redis.set(publishLock, 'publishing', { nx: true, expiration: new Date(Date.now() + 120000) }) !== 'OK') throw new Error('This level has already been published.')
+    try {
+      const ownLevels = await redis.hGetAll(userKey)
+      if (Object.values(ownLevels).some(raw => {
+        try { return (JSON.parse(raw) as { levelKey?: unknown }).levelKey === levelKey } catch { return false }
+      })) throw new Error('This level has already been published.')
     const closesAt = Date.now() + 7 * 86400000
     const post = await reddit.submitCustomPost({
       subredditName: context.subredditName, entry: 'default', runAs: 'USER',
@@ -118,7 +126,6 @@ community.post('/community', async c => {
     const key = `plungee:v1:post:${post.id}:level`
     await trackPrivacyPost(post.id, String(context.userId))
     await redis.set(key, JSON.stringify(value.level))
-    const userKey = `plungee:v2:user:${context.userId}:levels`
     await redis.hSet(userKey, { [post.id]: JSON.stringify({ levelKey, title: value.title.trim() }) })
     const meta: CommunityLevelMeta = {
       id: post.id, title: value.title.trim(), author: context.username ?? 'Deleted user',
@@ -127,6 +134,9 @@ community.post('/community', async c => {
     await redis.set(metaKey(post.id), JSON.stringify(meta))
     await redis.zAdd(communityIndex, { member: post.id, score: meta.createdAt })
     return c.json({ postId: post.id })
+    } finally {
+      await redis.del(publishLock)
+    }
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Could not publish level.' }, 400)
   }

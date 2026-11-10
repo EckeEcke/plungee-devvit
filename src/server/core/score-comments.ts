@@ -2,9 +2,10 @@ import { reddit } from '@devvit/web/server'
 import type { T1, T3 } from '@devvit/shared-types/tid.js'
 
 /** Visible copy for the one sticky time-reply thread. */
-const SCORE_THREAD_TEXT = 'Times\nReply with your time.'
-/** Legacy marker used to recognize threads created before the copy was revised. */
+const SCORE_THREAD_TEXT = '[plungee-score-thread]\n🏁 Verified Plungee results — reply here to share your score.'
+/** Older visible copies are recognized so existing threads can be migrated in place. */
 const LEGACY_SCORE_THREAD_MARKER = '[plungee-score-thread]'
+const OLD_SCORE_THREAD_TEXT = 'Times\nReply with your time.'
 
 /**
  * Return the one sticky score thread for a post, creating it when an older
@@ -15,9 +16,9 @@ export async function ensureScoreThread(postId: string): Promise<T1> {
   const typedPostId = postId as T3
   const topLevel = await reddit.getComments({ postId: typedPostId, limit: 100, sort: 'new' }).all()
   const sticky = topLevel.filter(comment => comment.parentId === typedPostId && comment.stickied)
-  const existing = sticky.find(comment => comment.body.includes(LEGACY_SCORE_THREAD_MARKER) || comment.body.trim() === SCORE_THREAD_TEXT)
+  const existing = sticky.find(comment => comment.body.includes(LEGACY_SCORE_THREAD_MARKER) || comment.body.trim() === OLD_SCORE_THREAD_TEXT)
   if (existing) {
-    if (existing.body.includes(LEGACY_SCORE_THREAD_MARKER)) await existing.edit({ text: SCORE_THREAD_TEXT })
+    if (existing.body.trim() !== SCORE_THREAD_TEXT) await existing.edit({ text: SCORE_THREAD_TEXT })
     return existing.id
   }
   if (sticky.length > 0) {

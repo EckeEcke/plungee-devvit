@@ -225,7 +225,7 @@ function openEditor(event: MouseEvent): void {
               <p class="challenge-question">{{ postKind === 'weeklyReplay' ? 'Watch the top 5 race!' : postKind === 'campaign' ? 'Play the Campaign' : postKind === 'challenge' ? 'Can you beat my time?' : 'Set the fastest time!' }}</p>
               <p v-if="postKind === 'challenge' && targetTicks !== null" class="challenge-target">{{ formatTicks(targetTicks) }}</p>
               <h2 class="level-name">{{ postKind === 'campaign' ? `${LEVELS.length} levels · Easy / Normal / Hard` : level.title }}</h2>
-              <p v-if="postKind === 'campaign'" class="weekly-countdown">Choose a level. Earn medals. Beat your best.</p>
+              <p v-if="postKind === 'campaign'" class="weekly-countdown campaign-description">Choose a level. Earn medals. Beat your best.</p>
               <p v-if="postKind === 'weekly' && weeklyTimeLeft" class="weekly-countdown" role="timer">{{ weeklyTimeLeft }}</p>
               <p v-else-if="postKind === 'weeklyReplay'" class="weekly-countdown">Week of {{ replayWeek }}</p>
             </div>

@@ -95,6 +95,7 @@ const bump = (): void => {
 doc.onChange = bump
 
 const proof = shallowRef<{ hash: string; run: RunProof } | null>(draft?.proof ?? null)
+const published = shallowRef(draft?.published ?? null)
 const ctrl = shallowRef<EditorController | null>(null)
 const tool = ref<ToolId>('tile')
 const mode = ref<'edit' | 'test'>('edit')
@@ -135,6 +136,7 @@ const cssVars = computed(() => ({
   '--bg2': props.theme.bgBottom,
   '--outline': props.theme.outline,
   '--line': props.theme.ui.line,
+  '--success': props.theme.ui.success,
   '--danger': props.theme.danger,
 }))
 
@@ -348,7 +350,7 @@ function loadTemplate(data: LevelData): void {
 // --- Hochladen zur Freigabe ---------------------------------------------------------
 
 const uploading = ref(false)
-const publishedUrl = ref('')
+const publishedUrl = computed(() => published.value?.hash === hash.value ? published.value.url : '')
 
 /** Hashes, die in dieser Sitzung schon hochgeladen wurden (der Server lehnt Doppelte ohnehin ab) */
 const uploadedHashes = new Set<string>()
@@ -363,7 +365,7 @@ const titleBad = computed(() => {
 })
 
 const titleOk = computed(() => titleLengthOk.value && !titleBad.value)
-const alreadyUploaded = computed(() => uploadedHashes.has(hash.value))
+const alreadyUploaded = computed(() => uploadedHashes.has(hash.value) || published.value?.hash === hash.value)
 const canUpload = computed(
   () => verified.value && titleOk.value && !uploading.value && !alreadyUploaded.value,
 )
@@ -376,8 +378,10 @@ async function upload(): Promise<void> {
   const h = levelHash(data)
   uploading.value = true
   try {
-    publishedUrl.value = await uploadLevel(doc.title.trim(), data, proof.value.run.replay)
+    const url = await uploadLevel(doc.title.trim(), data, proof.value.run.replay)
     uploadedHashes.add(h)
+    published.value = { hash: h, url }
+    save()
     showToast('Published! Your level is now a playable Reddit post.')
   } catch (e) {
     if (e instanceof Error && /already uploaded/i.test(e.message)) uploadedHashes.add(h)
@@ -441,7 +445,7 @@ function onKey(e: KeyboardEvent): void {
 
 let saveTimer = 0
 function save(): void {
-  saveDraft({ level: doc.toLevelData(), proof: proof.value })
+  saveDraft({ level: doc.toLevelData(), proof: proof.value, published: published.value ?? undefined })
 }
 watch([uiVersion, proof], () => {
   clearTimeout(saveTimer)
@@ -899,8 +903,8 @@ onBeforeUnmount(() => {
           </p>
           <p v-if="verified && titleBad" class="note">{{ titleBad }}</p>
           <p v-else-if="verified && !titleOk" class="note">Give your level a name of 3–32 characters first (field at the top of this menu).</p>
-          <button class="cta" type="submit" :disabled="!canUpload">
-            {{ uploading ? 'Uploading …' : alreadyUploaded ? '✓ Uploaded' : 'Publish Reddit post' }}
+          <button class="cta" :class="{ success: alreadyUploaded }" type="submit" :disabled="!canUpload">
+            {{ uploading ? 'Uploading …' : alreadyUploaded ? '✓ Published successfully' : 'Publish Reddit post' }}
           </button>
           <template v-if="DEV">
             <p class="note">Local only: export the level as a <code>.level.ts</code> file for <code>src/levels/easy|normal|hard/</code> (the folder sets the difficulty). It is picked up by the game automatically (no test run needed).</p>
@@ -1439,6 +1443,11 @@ input {
 .cta:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+.cta.success:disabled {
+  background: var(--success);
+  opacity: 1;
 }
 
 .ghost {

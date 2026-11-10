@@ -1,7 +1,11 @@
 import type { LevelData } from '../sim'
 import type { RunProof } from './share'
 
-export interface Draft { level: LevelData; proof: { hash: string; run: RunProof } | null }
+export interface Draft {
+  level: LevelData
+  proof: { hash: string; run: RunProof } | null
+  published?: { hash: string; url: string }
+}
 let draft: Draft | null = null
 let pending: ReturnType<typeof setTimeout> | undefined
 export async function prepareDraft(): Promise<void> {
