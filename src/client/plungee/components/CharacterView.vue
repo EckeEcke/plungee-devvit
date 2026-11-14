@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import PageShell from './PageShell.vue'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { MEMPHIS_DARK, type Theme } from '../game/theme'
 import { applyLook, COLORS, DEFAULT_LOOK, EYES, look, PATTERN_COLORS, PATTERNS, randomLook } from '../game/look'
 import CharacterCanvas from './CharacterCanvas.vue'
@@ -16,6 +16,16 @@ const base = computed(() => MEMPHIS_DARK)
 
 /** Vorschau: Basis-Theme mit der gewählten Farbe, genau wie im Spiel */
 const themed = computed(() => applyLook(base.value, look))
+
+const previewSize = ref(96)
+function resizePreviews(): void {
+  previewSize.value = window.innerWidth >= 800 && window.innerHeight >= 500 ? 168 : 96
+}
+onMounted(() => {
+  resizePreviews()
+  window.addEventListener('resize', resizePreviews)
+})
+onBeforeUnmount(() => window.removeEventListener('resize', resizePreviews))
 
 function swatch(id: string): { background: string } {
   const c = COLORS.find((o) => o.id === id)!
@@ -53,6 +63,7 @@ function randomize(): void {
     <div class="scroll">
       <div class="col">
         <section class="stage">
+          <div class="preview-tools">
           <button class="preview-action randomize" type="button" aria-label="Randomize" title="Randomize" @click="randomize">
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
               <rect x="3" y="3" width="18" height="18" rx="4" />
@@ -70,8 +81,9 @@ function randomize(): void {
               <path d="M4 10a8 8 0 1 1 1.5 7M4 4v6h6" />
             </svg>
           </button>
+          </div>
           <div class="character-preview">
-            <CharacterCanvas :colors="themed" :look="look" :size="168" />
+            <CharacterCanvas :colors="themed" :look="look" :size="previewSize" />
           </div>
         </section>
 
@@ -94,32 +106,38 @@ function randomize(): void {
           </div>
 
           <h3>Eyes</h3>
-          <div class="chips" role="radiogroup" aria-label="Eyes">
+          <div class="choices" role="radiogroup" aria-label="Eyes">
             <button
               v-for="o in EYES"
               :key="o.id"
               type="button"
               role="radio"
               :class="{ on: look.eyes === o.id }"
+              class="choice"
+              :aria-label="o.label"
               :aria-checked="look.eyes === o.id"
               @click="look.eyes = o.id"
             >
-              {{ o.label }}
+              <CharacterCanvas :colors="themed" :look="{ ...look, eyes: o.id, pattern: 'none' }" :size="56" :animate="false" />
+              <span>{{ o.label }}</span>
             </button>
           </div>
 
           <h3>Pattern</h3>
-          <div class="chips" role="radiogroup" aria-label="Pattern">
+          <div class="choices" role="radiogroup" aria-label="Pattern">
             <button
               v-for="o in PATTERNS"
               :key="o.id"
               type="button"
               role="radio"
               :class="{ on: look.pattern === o.id }"
+              class="choice"
+              :aria-label="o.label"
               :aria-checked="look.pattern === o.id"
               @click="look.pattern = o.id"
             >
-              {{ o.label }}
+              <CharacterCanvas :colors="themed" :look="{ ...look, pattern: o.id }" :size="56" :animate="false" />
+              <span>{{ o.label }}</span>
             </button>
           </div>
 
@@ -171,8 +189,8 @@ function randomize(): void {
 }
 
 .ib {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   font-size: 20px;
   font-weight: 900;
   color: var(--text);
@@ -203,7 +221,7 @@ function randomize(): void {
 }
 
 .col {
-  width: min(100%, 520px);
+  width: min(100%, 960px);
   margin: 0 auto;
   display: grid;
   gap: 14px;
@@ -219,11 +237,22 @@ function randomize(): void {
 }
 
 .stage {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  align-self: start;
+  background: var(--bg1);
   display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
   justify-items: center;
-  gap: 10px;
+  gap: 6px 10px;
+  padding: 10px;
 }
+
+.preview-tools { grid-column: 2; grid-row: 1; align-self: start; display: flex; flex-direction: column; gap: 6px; }
+.character-preview { grid-column: 1; grid-row: 1; }
+.opts { min-width: 0; }
 
 h3 {
   margin: 14px 0 8px;
@@ -250,8 +279,8 @@ h3:first-child {
 }
 
 .sw {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   cursor: pointer;
   border: 3px solid var(--line);
   border-radius: 12px;
@@ -262,33 +291,43 @@ h3:first-child {
   outline-offset: 2px;
 }
 
-.chips {
-  display: flex;
-  flex-wrap: wrap;
+.choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
   gap: 8px;
 }
 
-.chips button {
+.choice {
+  min-width: 0;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   cursor: pointer;
   font: inherit;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 800;
-  padding: 7px 14px;
+  padding: 6px 4px;
   color: var(--text);
   background: transparent;
   border: 2px solid var(--line);
-  border-radius: 999px;
+  border-radius: 12px;
 }
 
-.chips button.on {
-  color: var(--outline);
-  background: var(--accent);
-  border-color: var(--outline);
+.choice span { min-height: 28px; display: grid; place-items: center; text-align: center; overflow-wrap: anywhere; }
+
+.choice.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
+
+.choice:focus-visible, .sw:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 
 .preview-action {
-  position: absolute;
-  top: 8px;
+  flex: none;
   display: grid;
   place-items: center;
   width: 44px;
@@ -300,17 +339,18 @@ h3:first-child {
   border: 2px solid var(--line);
   border-radius: 12px;
 }
-.preview-action.randomize { right: 8px; }
-.preview-action.reset { right: 8px; top: 60px; }
 .preview-action svg { width: 22px; height: 22px; }
 .preview-action:hover { background: var(--accent); color: var(--outline); }
 .preview-action:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 h3.disabled { opacity: 0.35; }
 .sw:disabled { opacity: 0.55; cursor: not-allowed; }
-.character-preview { width: 168px; height: 168px; }
-@media (max-width: 599px) {
-  .stage { position: sticky; top: 0; z-index: 2; padding: 10px 16px; }
-  .character-preview { width: 96px; height: 96px; }
-  .character-preview :deep(canvas) { transform: scale(0.57142857); transform-origin: top left; }
+@media (min-width: 800px) {
+  .col { grid-template-columns: 250px minmax(0, 1fr); align-items: start; }
+}
+
+@media (min-width: 800px) and (min-height: 500px) {
+  .stage { grid-template-columns: minmax(0, 1fr); padding: 14px 16px; gap: 12px; }
+  .preview-tools { grid-column: 1; grid-row: 1; flex-direction: row; justify-self: end; }
+  .character-preview { grid-column: 1; grid-row: 2; }
 }
 </style>
