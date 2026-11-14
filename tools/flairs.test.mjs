@@ -8,7 +8,7 @@ globalThis.__plungeeFlairTest = mocks
 const stub = 'data:text/javascript,' + encodeURIComponent('const mock = globalThis.__plungeeFlairTest; export const context=mock.context; export const reddit=mock.reddit; export const redis=mock.redis; export const scheduler={};')
 registerHooks({ resolve(specifier, context, nextResolve) {
   if (specifier === '@devvit/web/server') return { url: stub, shortCircuit: true }
-  if (specifier === '../../client/plungee/levels') return { url: 'data:text/javascript,' + encodeURIComponent('export const LEVELS=[{key:"easy/test", title:"Test", data:{}, difficulty:"easy"}]; export const LEVELS_BY_DIFFICULTY={easy:LEVELS};'), shortCircuit: true }
+  if (specifier === '../../client/plungee/levels') return { url: 'data:text/javascript,' + encodeURIComponent('export const LEVELS=[{key:"easy/test", title:"Test", data:{}, difficulty:"easy"}]; export const LEVELS_BY_DIFFICULTY={easy:LEVELS}; export const findLevel=key=>LEVELS.find(level=>level.key===key);'), shortCircuit: true }
   if (specifier === '../../client/plungee/sim') return { url: 'data:text/javascript,' + encodeURIComponent('export const formatTicks=ticks=>(ticks/60).toFixed(2); export const decodeInputs=()=>new Int8Array();'), shortCircuit: true }
   try { return nextResolve(specifier, context) }
   catch (error) {

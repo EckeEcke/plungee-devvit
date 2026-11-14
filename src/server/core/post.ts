@@ -1,5 +1,5 @@
 import { context, reddit } from '@devvit/web/server'
-import { LEVELS, LEVELS_BY_DIFFICULTY } from '../../client/plungee/levels'
+import { LEVELS, LEVELS_BY_DIFFICULTY, findLevel } from '../../client/plungee/levels'
 import { formatTicks } from '../../client/plungee/sim'
 import type { StoredScore } from './scores'
 import { postFlair } from './flairs'
@@ -25,7 +25,7 @@ const CHALLENGE_DURATION_MS = 7 * 24 * 60 * 60 * 1000
 /** Creates a challenge only after an explicit user action from the expanded game. */
 export async function createChallengePost(levelKey: string, sourcePostId: string, personalBest: StoredScore) {
   const subredditName = context.subredditName
-  const level = LEVELS.find(candidate => candidate.key === levelKey)
+  const level = findLevel(levelKey)
   if (!subredditName || !context.userId || !level) throw new Error('Challenge level or Reddit user unavailable')
 
   const createdAt = Date.now()
@@ -87,7 +87,7 @@ export async function createWeeklyPost(weekId: string, startsAt: number, closesA
 /** App-owned spectator post: it references the original weekly scores, never a new board. */
 export async function createWeeklyReplayPost(previous: WeeklyChallenge) {
   const subredditName = context.subredditName
-  const level = LEVELS.find(candidate => candidate.key === previous.levelKey)
+  const level = findLevel(previous.levelKey)
   if (!subredditName || !level || previous.closesAt > Date.now()) throw new Error('Previous weekly replay unavailable.')
   return reddit.submitCustomPost({
     subredditName, entry: 'default', ...await postFlair('weeklyReplay'),

@@ -4,7 +4,7 @@ import { requestExpandedMode } from '@devvit/web/client'
 import CharacterCanvas from './plungee/components/CharacterCanvas.vue'
 import { look, applyLook } from './plungee/game/look'
 import { MEMPHIS_DARK } from './plungee/game/theme'
-import { LEVELS, type LevelEntry } from './plungee/levels'
+import { LEVELS, findLevel, type LevelEntry } from './plungee/levels'
 import type { PostInitResponse } from '../shared/api'
 import type { ChallengeVersusResponse } from '../shared/api'
 import { compileLevel, formatTicks, LEVEL_WIDTH, TILE, World } from './plungee/sim'
@@ -106,7 +106,7 @@ onMounted(async () => {
     }
     const entry = data.kind === 'community' && data.levelData
       ? { key: data.levelKey, title: data.title, data: data.levelData as LevelEntry['data'], difficulty: 'normal' as const, par: null }
-      : LEVELS.find(l => l.key === data.levelKey)
+      : findLevel(data.levelKey)
     if (!entry) throw new Error('Level missing from this version of Plungee')
 
     level.value = entry

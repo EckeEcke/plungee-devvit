@@ -1,5 +1,5 @@
 import { context, redis, reddit } from '@devvit/web/server'
-import { LEVELS } from '../../client/plungee/levels'
+import { findLevel } from '../../client/plungee/levels'
 import { createWeeklyPost, createWeeklyReplayPost, weeklyLevelFor } from './post'
 import { ensureWeeklyPair, type WeeklyChallenge } from './weekly-policy'
 export { currentWeeklyWindow } from './weekly-policy'
@@ -13,7 +13,7 @@ export async function getWeeklyChallenge(weekId: string): Promise<WeeklyChalleng
   const values = await redis.hGetAll(metadataKey(weekId))
   if (!values.postId || !values.levelKey || !values.startsAt || !values.closesAt) return null
   if (!/^t3_[a-z0-9]+$/.test(values.postId) || !Number.isFinite(Number(values.startsAt)) || !Number.isFinite(Number(values.closesAt)) || Number(values.closesAt) <= Number(values.startsAt)) return null
-  if (!LEVELS.some(level => level.key === values.levelKey)) return null
+  if (!findLevel(values.levelKey)) return null
   return { weekId, levelKey: values.levelKey, startsAt: Number(values.startsAt), closesAt: Number(values.closesAt), postId: values.postId, ...(values.replayPostId ? { replayPostId: values.replayPostId } : {}) }
 }
 
@@ -24,7 +24,7 @@ async function findWeeklyPost(kind: 'weekly' | 'weeklyReplay', weekId: string, s
   for (const post of posts) {
     if (post.removed || post.spam || !post.title.startsWith('Plungee Weekly')) continue
     const raw = await post.getPostData()
-    if (raw?.kind === kind && raw.weekId === weekId && typeof raw.levelKey === 'string' && LEVELS.some(level => level.key === raw.levelKey) && (!sourcePostId || raw.sourcePostId === sourcePostId)) return { postId: post.id, raw }
+    if (raw?.kind === kind && raw.weekId === weekId && typeof raw.levelKey === 'string' && findLevel(raw.levelKey) && (!sourcePostId || raw.sourcePostId === sourcePostId)) return { postId: post.id, raw }
   }
   return null
 }

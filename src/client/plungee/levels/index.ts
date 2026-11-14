@@ -34,6 +34,16 @@ const ids = new Set<string>(DIFFICULTIES.map((d) => d.id))
 
 export const LEVELS_BY_DIFFICULTY: Record<Difficulty, LevelEntry[]> = { easy: [], normal: [], hard: [] }
 
+// Retain the original definitions for Reddit posts that already reference them.
+// Replaced levels are no longer offered in the current campaign or new weeklies.
+const RETIRED_KEYS = new Set([
+  'easy/14-don-tget-crushed',
+  'easy/19-up-in-the-corner',
+  'easy/20-drop-it-like-it-shot',
+  'easy/23-jump-jump',
+])
+const legacyLevels: LevelEntry[] = []
+
 for (const path of Object.keys(modules).sort()) {
   const key = path.replace(/^\.\//, '').replace(/\.level\.ts$/, '')
   const folder = key.split('/')[0]
@@ -54,7 +64,8 @@ for (const path of Object.keys(modules).sort()) {
   }
   const p = PAR[key]
   const par = p && p.hash === levelHash(data) ? (p.ticks ?? null) : null
-  LEVELS_BY_DIFFICULTY[folder as Difficulty].push({
+  const entries = RETIRED_KEYS.has(key) ? legacyLevels : LEVELS_BY_DIFFICULTY[folder as Difficulty]
+  entries.push({
     key,
     difficulty: folder as Difficulty,
     title: data.title || key,
@@ -65,3 +76,8 @@ for (const path of Object.keys(modules).sort()) {
 
 /** Alle Level, nach Schwierigkeit und Dateiname geordnet */
 export const LEVELS: LevelEntry[] = DIFFICULTIES.flatMap((d) => LEVELS_BY_DIFFICULTY[d.id])
+
+/** Resolve both current campaign IDs and IDs used by existing Reddit posts. */
+export function findLevel(key: unknown): LevelEntry | undefined {
+  return LEVELS.find(level => level.key === key) ?? legacyLevels.find(level => level.key === key)
+}

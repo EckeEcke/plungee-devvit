@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { context, redis, reddit } from '@devvit/web/server'
 import type { ChallengeProfile, ChallengeVersusResponse } from '../../shared/api'
-import { LEVELS } from '../../client/plungee/levels'
+import { findLevel } from '../../client/plungee/levels'
 import { compileLevel, decodeInputs, simulate, TICK_RATE } from '../../client/plungee/sim'
 import { bragText, deathText, isWinningRun } from '../core/brag'
 import type { ApiError, LeaderboardResponse, PostInitResponse, VerifyRunResponse } from '../../shared/api'
@@ -89,7 +89,7 @@ async function postLevel(raw = context.postData as Record<string, unknown> | und
     const data = JSON.parse(stored)
     return { key: levelKey, title: data.title as string, data, difficulty: 'normal' as const, par: null }
   }
-  return LEVELS.find(level => level.key === levelKey) ?? null
+  return findLevel(levelKey) ?? null
 }
 
 function challengeClose(raw = context.postData as Record<string, unknown> | undefined): number | null {
@@ -140,7 +140,7 @@ api.post('/create-challenge', async (c) => {
     try { campaignLevelKey = (await c.req.json()).campaignLevelKey }
     catch { return c.json<ApiError>({ error: 'Invalid request.' }, 400) }
   }
-  const level = campaignLevelKey === undefined ? await postLevel() : LEVELS.find(level => level.key === campaignLevelKey)
+  const level = campaignLevelKey === undefined ? await postLevel() : findLevel(campaignLevelKey)
   if (!level) return c.json<ApiError>({ error: 'Post level unavailable.' }, 400)
 
   const personalBest = await getPersonalBest(campaignLevelKey === undefined ? context.postId : `campaign:${level.key}`)
@@ -169,7 +169,7 @@ api.post('/verify-campaign', async c => {
   let value: { levelKey?: unknown; replay?: unknown; look?: unknown }
   try { value = await c.req.json() }
   catch { return c.json<ApiError>({ error: 'Invalid request.' }, 400) }
-  const level = LEVELS.find(level => level.key === value?.levelKey)
+  const level = findLevel(value?.levelKey)
   if (!level || typeof value?.replay !== 'string' || !value.replay || value.replay.length > 120000) return c.json<ApiError>({ error: 'Invalid level or replay.' }, 400)
   try {
     const result = simulate(compileLevel(level.data), decodeInputs(value.replay))

@@ -8,14 +8,14 @@ This repository contains the Devvit app **Plungee**, registered as `plungee-game
 
 ## Play
 
-- **Campaign:** 75 levels across Easy, Normal and Hard, with medals, personal bests and an optional ghost of your own best run.
+- **Campaign:** 84 levels across Easy, Normal and Hard, with medals, personal bests and an optional ghost of your own best run.
 - **Weekly Challenge:** a shared level with seven days to set your fastest verified time.
 - **Community levels:** play levels created and published by other players.
 - **Level editor:** build, test and verify a level before publishing it to the subreddit.
 - **Character editor:** choose body colors, eye styles and Memphis patterns, or roll a random combination.
 - **Controls:** arrow keys or A/D on desktop; hold the left or right side on mobile. Press R to restart on desktop.
 
-Levels combine ice, conveyor belts, Climber walls, brittle blocks, directional gates, blink blocks, springs, spikes, falling spikes, lasers, hammers, saws, moving platforms and crushers. Climber walls carry you upwards while you press towards them; release or steer away to fall.
+Levels combine ice, conveyor belts, Climber walls, brittle blocks, directional gates, blink blocks, springs, spikes, falling spikes, lasers, hammers, saws, moving platforms, crushers, keys and doors. Climber walls carry you upwards while you press towards them; release or steer away to fall.
 
 ## Reddit posts
 

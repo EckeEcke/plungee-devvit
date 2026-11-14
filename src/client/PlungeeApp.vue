@@ -12,7 +12,7 @@ import CharacterCanvas from './plungee/components/CharacterCanvas.vue'
 import LegalView from './plungee/components/LegalView.vue'
 import { applyLook, DEFAULT_LOOK, look, sanitizeLook } from './plungee/game/look'
 import { MEMPHIS_DARK } from './plungee/game/theme'
-import { DIFFICULTIES, LEVELS, LEVELS_BY_DIFFICULTY, type Difficulty, type LevelEntry } from './plungee/levels'
+import { DIFFICULTIES, findLevel, LEVELS_BY_DIFFICULTY, type Difficulty, type LevelEntry } from './plungee/levels'
 import type { ProgressMap } from './plungee/game/progress'
 import { loadProgress, recordResult } from './plungee/game/progress'
 import { formatTicks } from './plungee/sim'
@@ -114,7 +114,7 @@ async function initialize(): Promise<void> {
     }
     const level = data.kind === 'community' && data.levelData
       ? { key: data.levelKey, title: data.title, data: data.levelData as LevelEntry['data'], difficulty: 'normal' as const, par: null }
-      : LEVELS.find(l => l.key === data.levelKey)
+      : findLevel(data.levelKey)
     if (!level) throw new Error('Level missing from this version of Plungee.')
     postLevel.value = level
     activePostId.value = data.postId
@@ -200,7 +200,7 @@ async function playCommunityPost(id: string, kind: 'community' | 'weekly' = 'com
     if (data.kind !== kind) throw new Error('Challenge unavailable.')
     const level = kind === 'community' && data.levelData
       ? { key: data.levelKey, title: data.title, data: data.levelData as LevelEntry['data'], difficulty: 'normal' as const, par: null }
-      : kind === 'weekly' ? LEVELS.find(level => level.key === data.levelKey) : null
+      : kind === 'weekly' ? findLevel(data.levelKey) : null
     if (!level) throw new Error('Level unavailable.')
     postLevel.value = level
     activePostId.value = data.postId
