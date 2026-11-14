@@ -35,10 +35,10 @@ export const EYES = [
   { id: 'googly', label: 'Googly' },
   { id: 'sleepy', label: 'Sleepy' },
   { id: 'lashes', label: 'Lashes' },
-  { id: 'pin', label: 'Pin' },
-  { id: 'button', label: 'Button' },
+  { id: 'pin', label: 'Surprised' },
+  { id: 'button', label: 'Alien' },
   { id: 'cross-eyed', label: 'Cross-eyed' },
-  { id: 'skeptical', label: 'Skeptical' },
+  { id: 'skeptical', label: 'Not sure' },
 ] as const
 
 export type EyeId = (typeof EYES)[number]['id']
